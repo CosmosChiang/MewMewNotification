@@ -1,0 +1,348 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 380px;
+  min-height: 500px;
+  max-height: 600px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-right: 8px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.mark-all-read-btn,
+.settings-btn,
+.refresh-btn,
+.clear-all-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  font-size: 12px;
+}
+
+.mark-all-read-btn:hover,
+.settings-btn:hover,
+.refresh-btn:hover,
+.clear-all-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.refresh-btn:active {
+  transform: rotate(360deg);
+  transition: transform 0.5s ease-in-out;
+}
+
+.refresh-btn:disabled {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.clear-all-btn:hover {
+  background: rgba(255, 0, 0, 0.3);
+}
+
+.notification-item {
+  animation: slideIn 0.3s ease-out;
+  transition: all 0.2s ease-in-out;
+}
+
+.notification-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.notification-item.removing {
+  animation: slideOut 0.3s ease-in forwards;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+    max-height: 0;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+.mark-all-read-btn:disabled,
+.settings-btn:disabled,
+.refresh-btn:disabled,
+.clear-all-btn:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.content {
+  padding: 16px;
+  height: calc(100% - 64px);
+  overflow-y: auto;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #666;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.notifications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notification-item {
+  background: white;
+  border-radius: 8px;
+  padding: 12px;
+  border-left: 4px solid #667eea;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.notification-item:hover {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  transform: translateY(-1px);
+}
+
+.notification-item.read {
+  opacity: 0.7;
+  border-left-color: #ccc;
+}
+
+.notification-item.updated {
+  opacity: 1;
+  border-left-color: #ff9800;
+  background-color: #fff8e1;
+}
+
+.notification-content {
+  flex: 1;
+  margin-right: 8px;
+}
+
+.notification-title {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+  font-size: 14px;
+  line-height: 1.3;
+  position: relative;
+}
+
+.source-badge {
+  display: inline-block;
+  font-size: 12px;
+  margin-right: 6px;
+  opacity: 0.8;
+  vertical-align: middle;
+}
+
+.source-badge.assigned {
+  filter: hue-rotate(210deg); /* Blue tint for assigned issues */
+}
+
+.source-badge.watched {
+  filter: hue-rotate(120deg); /* Green tint for watched issues */
+}
+
+.notification-meta {
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  gap: 12px;
+}
+
+.notification-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.mark-read-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.mark-read-btn:hover {
+  background: #218838;
+}
+
+.mark-read-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.empty-state,
+.error-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.empty-icon,
+.error-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-state p,
+.error-state p {
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+.retry-btn {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.retry-btn:hover {
+  background: #5a6fd8;
+}
+
+.update-indicator {
+  color: #ff9800;
+  margin-right: 4px;
+  font-size: 12px;
+  display: inline-block;
+  animation: pulse 1.5s infinite;
+}
+
+.update-text {
+  color: #ff9800;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 2px 6px;
+  background-color: #fff3e0;
+  border-radius: 12px;
+  border: 1px solid #ffb74d;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Scrollbar styling */
+.content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.content::-webkit-scrollbar-thumb:hover {
+  background: #bbb;
+}

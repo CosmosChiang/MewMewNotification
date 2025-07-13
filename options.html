@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Settings</title>
+  <link rel="stylesheet" href="styles/options.css">
+</head>
+<body>
+  <div class="container">
+    <h1 id="settingsTitle">Settings</h1>
+    
+    <div class="tabs">
+      <button class="tab-button active" data-tab="redmine" id="redmineTab">Redmine</button>
+      <button class="tab-button" data-tab="notifications" id="notificationsTab">Notifications</button>
+      <button class="tab-button" data-tab="language" id="languageTab">Language</button>
+      <button class="tab-button" data-tab="about" id="aboutTab">About</button>
+    </div>
+    
+    <div class="tab-content">
+      <!-- Redmine Settings -->
+      <div id="redmine" class="tab-panel active">
+        <h2 id="redmineSettingsTitle">Redmine Configuration</h2>
+        <div class="form-group">
+          <label for="redmineUrl" id="redmineUrlLabel">Redmine URL:</label>
+          <input type="url" id="redmineUrl" placeholder="https://your-redmine-instance.com">
+          <small id="redmineUrlHelp">Enter your Redmine server URL</small>
+        </div>
+        <div class="form-group">
+          <label for="apiKey" id="apiKeyLabel">API Key:</label>
+          <input type="password" id="apiKey" placeholder="Your Redmine API key">
+          <small id="apiKeyHelp">You can find your API key in your Redmine account settings</small>
+        </div>
+        <button id="testConnectionBtn" class="test-btn">Test Connection</button>
+        <div id="connectionStatus" class="status-message"></div>
+        <div class="section-footer">
+          <button id="saveRedmineBtn" class="save-section-btn">Save Redmine Settings</button>
+        </div>
+        <div id="redmineStatus" class="status-message"></div>
+      </div>
+      
+      <!-- Notification Settings -->
+      <div id="notifications" class="tab-panel">
+        <h2 id="notificationSettingsTitle">Notification Settings</h2>
+        <div class="form-group">
+          <label for="checkInterval" id="checkIntervalLabel">Check Interval (minutes):</label>
+          <select id="checkInterval">
+            <option value="1">1 minute</option>
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="enableNotifications">
+            <span id="enableNotificationsLabel">Enable desktop notifications</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="enableSound">
+            <span id="enableSoundLabel">Enable notification sound</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="onlyMyProjects">
+            <span id="onlyMyProjectsLabel">Only show issues assigned to me</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="includeWatchedIssues">
+            <span id="includeWatchedIssuesLabel">Include issues I'm watching</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="maxNotifications" id="maxNotificationsLabel">Maximum notifications to show:</label>
+          <select id="maxNotifications">
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <div class="section-footer">
+          <button id="saveNotificationsBtn" class="save-section-btn">Save Notification Settings</button>
+        </div>
+        <div id="notificationsStatus" class="status-message"></div>
+      </div>
+      
+      <!-- Language Settings -->
+      <div id="language" class="tab-panel">
+        <h2 id="languageSettingsTitle">Language Settings</h2>
+        <div class="form-group">
+          <label for="languageSelect" id="languageSelectLabel">Select Language:</label>
+          <select id="languageSelect">
+            <option value="en">English</option>
+            <option value="zh_TW">繁體中文</option>
+            <option value="zh_CN">简体中文</option>
+            <option value="ja">日本語</option>
+          </select>
+        </div>
+        <div class="section-footer">
+          <button id="saveLanguageBtn" class="save-section-btn">Save Language Settings</button>
+        </div>
+        <div id="languageStatus" class="status-message"></div>
+      </div>
+      
+      <!-- About -->
+      <div id="about" class="tab-panel">
+        <h2 id="aboutTitle">About</h2>
+        <div class="about-content">
+          <div class="app-header">
+            <img src="icons/icon128.png" alt="MewMewNotification Icon" class="app-icon">
+            <div class="app-info">
+              <h3 id="aboutAppName">MewMewNotification</h3>
+              <p id="aboutVersion">Version: 1.0.0</p>
+            </div>
+          </div>
+          <p id="aboutDescription">MewMewNotification - Chrome 擴充功能，用於高效接收 Redmine 通知。</p>
+          
+          <h4 id="featuresTitle">Features:</h4>
+          <ul id="featuresList">
+            <li id="feature1">Real-time notification checking</li>
+            <li id="feature2">Desktop notifications with sound alerts</li>
+            <li id="feature3">Mark notifications as read</li>
+            <li id="feature4">Clear all notifications</li>
+            <li id="feature5">Direct links to Redmine issues</li>
+            <li id="feature6">Customizable check intervals</li>
+            <li id="feature7">Filter by assigned issues</li>
+            <li id="feature8">Include watched issues</li>
+            <li id="feature9">Multi-language support (EN/ZH_TW/ZH_CN/JA)</li>
+            <li id="feature10">Auto-detect issue updates</li>
+            <li id="feature11">Badge counter for unread notifications</li>
+          </ul>
+          
+          <h4 id="supportTitle">Support:</h4>
+          <p id="supportText">If you encounter any issues or have suggestions, please contact support.</p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <button id="resetBtn" class="reset-btn">Reset All to Default</button>
+    </div>
+    
+    <div id="saveStatus" class="status-message"></div>
+  </div>
+  
+  <script src="scripts/shared/i18n.js"></script>
+  <script src="scripts/shared/config-manager.js"></script>
+  <script src="scripts/options.js"></script>
+</body>
+</html>

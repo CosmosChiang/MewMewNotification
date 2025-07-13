@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MewMewNotification</title>
+  <link rel="stylesheet" href="styles/popup.css">
+</head>
+<body>
+  <div class="header">
+    <h1 id="headerTitle">MewMewNotification</h1>
+    <div class="header-actions">
+      <button id="refreshBtn" class="refresh-btn" title="Refresh notifications">
+        <span>🔄</span>
+      </button>
+      <button id="clearAllBtn" class="clear-all-btn" title="Clear all notifications">
+        <span>🗑️</span>
+      </button>
+      <button id="markAllReadBtn" class="mark-all-read-btn" title="Mark all as read">
+        <span>✓</span>
+      </button>
+      <button id="settingsBtn" class="settings-btn" title="Settings">
+        <span>⚙</span>
+      </button>
+    </div>
+  </div>
+  
+  <div class="content">
+    <div id="loadingIndicator" class="loading">
+      <div class="spinner"></div>
+      <span id="loadingText">Loading notifications...</span>
+    </div>
+    
+    <div id="notificationsList" class="notifications-list"></div>
+    
+    <div id="emptyState" class="empty-state" style="display: none;">
+      <div class="empty-icon">📋</div>
+      <p id="emptyText">No notifications available</p>
+    </div>
+    
+    <div id="errorState" class="error-state" style="display: none;">
+      <div class="error-icon">⚠️</div>
+      <p id="errorText">Failed to load notifications</p>
+      <button id="retryBtn" class="retry-btn">Retry</button>
+    </div>
+  </div>
+  
+  <script src="scripts/shared/i18n.js"></script>
+  <script src="scripts/popup.js"></script>
+</body>
+</html>

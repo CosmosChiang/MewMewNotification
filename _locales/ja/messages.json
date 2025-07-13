@@ -1,0 +1,406 @@
+{
+  "extName": {
+    "message": "MewMewNotification",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Redmine の課題とタスクの通知を受け取ります",
+    "description": "Extension description"
+  },
+  "popupTitle": {
+    "message": "MewMewNotification",
+    "description": "Popup window title"
+  },
+  "loadingText": {
+    "message": "通知を読み込み中...",
+    "description": "Loading indicator text"
+  },
+  "noNotifications": {
+    "message": "利用可能な通知がありません",
+    "description": "Empty state message"
+  },
+  "loadError": {
+    "message": "通知の読み込みに失敗しました",
+    "description": "Error message when loading fails"
+  },
+  "markAllRead": {
+    "message": "すべて既読にする",
+    "description": "Mark all read button tooltip"
+  },
+  "markAsRead": {
+    "message": "既読にする",
+    "description": "Mark as read button tooltip"
+  },
+  "settings": {
+    "message": "設定",
+    "description": "Settings button tooltip"
+  },
+  "justNow": {
+    "message": "たった今",
+    "description": "Time indicator for very recent notifications"
+  },
+  "minutesAgo": {
+    "message": "$1分前",
+    "description": "Time indicator for notifications from minutes ago"
+  },
+  "hoursAgo": {
+    "message": "$1時間前",
+    "description": "Time indicator for notifications from hours ago"
+  },
+  "daysAgo": {
+    "message": "$1日前",
+    "description": "Time indicator for notifications from days ago"
+  },
+  "updated": {
+    "message": "更新済み",
+    "description": "Label shown for items that have been updated"
+  },
+  "optionsTitle": {
+    "message": "設定",
+    "description": "Options page title"
+  },
+  "redmineSettings": {
+    "message": "Redmine",
+    "description": "Redmine settings tab"
+  },
+  "notificationSettings": {
+    "message": "通知",
+    "description": "Notification settings tab"
+  },
+  "languageSettings": {
+    "message": "言語",
+    "description": "Language settings tab"
+  },
+  "about": {
+    "message": "について",
+    "description": "About tab"
+  },
+  "redmineUrl": {
+    "message": "Redmine URL：",
+    "description": "Redmine URL field label"
+  },
+  "redmineUrlHelp": {
+    "message": "Redmine サーバーの URL を入力してください",
+    "description": "Redmine URL help text"
+  },
+  "redmineUrlPlaceholder": {
+    "message": "https://your-redmine-instance.com",
+    "description": "Redmine URL placeholder"
+  },
+  "apiKey": {
+    "message": "API キー：",
+    "description": "API Key field label"
+  },
+  "apiKeyHelp": {
+    "message": "API キーは Redmine のアカウント設定で確認できます",
+    "description": "API Key help text"
+  },
+  "apiKeyPlaceholder": {
+    "message": "あなたの Redmine API キー",
+    "description": "API Key placeholder"
+  },
+  "testConnection": {
+    "message": "接続テスト",
+    "description": "Test connection button"
+  },
+  "testing": {
+    "message": "テスト中...",
+    "description": "Testing connection button text"
+  },
+  "testingConnection": {
+    "message": "接続をテスト中...",
+    "description": "Testing connection status message"
+  },
+  "connectionSuccess": {
+    "message": "接続に成功しました！",
+    "description": "Successful connection message"
+  },
+  "connectionError": {
+    "message": "接続に失敗しました",
+    "description": "Failed connection message"
+  },
+  "checkInterval": {
+    "message": "チェック間隔（分）：",
+    "description": "Check interval field label"
+  },
+  "minute1": {
+    "message": "1分",
+    "description": "1 minute option"
+  },
+  "minutes5": {
+    "message": "5分",
+    "description": "5 minutes option"
+  },
+  "minutes10": {
+    "message": "10分",
+    "description": "10 minutes option"
+  },
+  "minutes15": {
+    "message": "15分",
+    "description": "15 minutes option"
+  },
+  "minutes30": {
+    "message": "30分",
+    "description": "30 minutes option"
+  },
+  "hour1": {
+    "message": "1時間",
+    "description": "1 hour option"
+  },
+  "enableDesktopNotifications": {
+    "message": "デスクトップ通知を有効にする",
+    "description": "Enable desktop notifications checkbox"
+  },
+  "enableNotificationSound": {
+    "message": "通知音を有効にする",
+    "description": "Enable notification sound checkbox"
+  },
+  "onlyMyProjects": {
+    "message": "自分に割り当てられた課題のみ表示",
+    "description": "Only my projects filter option"
+  },
+  "includeWatchedIssues": {
+    "message": "ウォッチしている課題を含める",
+    "description": "Include watched issues option"
+  },
+  "maxNotifications": {
+    "message": "最大表示通知数：",
+    "description": "Max notifications field label"
+  },
+  "selectLanguage": {
+    "message": "言語を選択：",
+    "description": "Language selection field label"
+  },
+  "language_en": {
+    "message": "English",
+    "description": "English language option"
+  },
+  "language_zh_TW": {
+    "message": "繁體中文",
+    "description": "Traditional Chinese language option"
+  },
+  "language_zh_CN": {
+    "message": "简体中文",
+    "description": "Simplified Chinese language option"
+  },
+  "language_ja": {
+    "message": "日本語",
+    "description": "Japanese language option"
+  },
+  "appName": {
+    "message": "MewMewNotification",
+    "description": "Application name in about section"
+  },
+  "version": {
+    "message": "バージョン：1.0.0",
+    "description": "Version information"
+  },
+  "appDescription": {
+    "message": "MewMewNotification - Redmine 通知を効率的に受信するための Chrome 拡張機能です。",
+    "description": "Application description"
+  },
+  "features": {
+    "message": "機能：",
+    "description": "Features section title"
+  },
+  "feature1": {
+    "message": "リアルタイム通知チェック",
+    "description": "Feature 1 description"
+  },
+  "feature2": {
+    "message": "デスクトップ通知と音声アラート",
+    "description": "Feature 2 description"
+  },
+  "feature3": {
+    "message": "通知を既読にマーク",
+    "description": "Feature 3 description"
+  },
+  "feature4": {
+    "message": "すべての通知をクリア",
+    "description": "Feature 4 description"
+  },
+  "feature5": {
+    "message": "Redmine 課題への直接リンク",
+    "description": "Feature 5 description"
+  },
+  "feature6": {
+    "message": "カスタマイズ可能なチェック間隔",
+    "description": "Feature 6 description"
+  },
+  "feature7": {
+    "message": "割り当て課題でフィルタ",
+    "description": "Feature 7 description"
+  },
+  "feature8": {
+    "message": "ウォッチ中の課題を含む",
+    "description": "Feature 8 description"
+  },
+  "feature9": {
+    "message": "多言語サポート (繁中/简中/日本語/英語)",
+    "description": "Feature 9 description"
+  },
+  "feature10": {
+    "message": "課題更新の自動検出",
+    "description": "Feature 10 description"
+  },
+  "feature11": {
+    "message": "未読通知のバッジカウンター",
+    "description": "Feature 11 description"
+  },
+  "support": {
+    "message": "サポート：",
+    "description": "Support section title"
+  },
+  "supportText": {
+    "message": "問題が発生した場合や提案がある場合は、サポートにお問い合わせください。",
+    "description": "Support section text"
+  },
+  "save": {
+    "message": "設定を保存",
+    "description": "Save button"
+  },
+  "saving": {
+    "message": "保存中...",
+    "description": "Saving button text"
+  },
+  "reset": {
+    "message": "すべてデフォルトにリセット",
+    "description": "Reset all settings button"
+  },
+  "missingRequiredFields": {
+    "message": "すべての必須フィールドを入力してください",
+    "description": "Missing required fields error"
+  },
+  "settingsSaved": {
+    "message": "設定が正常に保存されました！",
+    "description": "Settings saved success message"
+  },
+  "saveError": {
+    "message": "設定の保存に失敗しました",
+    "description": "Save settings error message"
+  },
+  "confirmReset": {
+    "message": "すべての設定をデフォルトにリセットしてもよろしいですか？",
+    "description": "Reset confirmation message"
+  },
+  "settingsReset": {
+    "message": "設定が正常にデフォルトにリセットされました！",
+    "description": "Settings reset success message"
+  },
+  "resetError": {
+    "message": "設定のリセットに失敗しました",
+    "description": "Reset settings error message"
+  },
+  "saveRedmineSettings": {
+    "message": "Redmine 設定を保存",
+    "description": "Save Redmine settings button"
+  },
+  "saveNotificationSettings": {
+    "message": "通知設定を保存",
+    "description": "Save notification settings button"
+  },
+  "saveLanguageSettings": {
+    "message": "言語設定を保存",
+    "description": "Save language settings button"
+  },
+  "redmineSettingsSaved": {
+    "message": "Redmine 設定が正常に保存されました！",
+    "description": "Redmine settings saved success message"
+  },
+  "notificationSettingsSaved": {
+    "message": "通知設定が正常に保存されました！",
+    "description": "Notification settings saved success message"
+  },
+  "languageSettingsSaved": {
+    "message": "言語設定が正常に保存されました！",
+    "description": "Language settings saved success message"
+  },
+  "refreshNotifications": {
+    "message": "通知を更新",
+    "description": "Refresh notifications button tooltip"
+  },
+  "clearAllNotifications": {
+    "message": "すべての通知をクリア",
+    "description": "Clear all notifications button tooltip"
+  },
+  "clearAllConfirmation": {
+    "message": "すべての通知をクリアしますか？この操作は取り消しできません。",
+    "description": "Clear all notifications confirmation message"
+  },
+  "clearAllError": {
+    "message": "通知のクリアに失敗しました。しばらく後にもう一度お試しください。",
+    "description": "Clear all notifications error message"
+  },
+  "urlRequired": {
+    "message": "Redmine URL は必須です",
+    "description": "URL required validation message"
+  },
+  "urlMustBeHttpOrHttps": {
+    "message": "URL は http:// または https:// で始まる必要があります",
+    "description": "URL protocol validation message"
+  },
+  "invalidUrlFormat": {
+    "message": "無効な URL 形式です",
+    "description": "URL format validation message"
+  },
+  "apiKeyRequired": {
+    "message": "API キーは必須です",
+    "description": "API key required validation message"
+  },
+  "apiKeyTooShort": {
+    "message": "API キーは10文字以上である必要があります",
+    "description": "API key length validation message"
+  },
+  "apiKeyTooLong": {
+    "message": "APIキーが長すぎます（最大100文字）",
+    "description": "API key maximum length validation message"
+  },
+  "apiKeyInvalidFormat": {
+    "message": "API キーは英数字のみ使用できます",
+    "description": "API key format validation message"
+  },
+  "mustBeNumber": {
+    "message": "$1 は有効な数値である必要があります",
+    "description": "Number validation message"
+  },
+  "numberOutOfRange": {
+    "message": "$1 は $2 から $3 の間である必要があります",
+    "description": "Number range validation message"
+  },
+  "assignedToMe": {
+    "message": "自分に割り当て",
+    "description": "Badge tooltip for issues assigned to me"
+  },
+  "watchedByMe": {
+    "message": "ウォッチ中",
+    "description": "Badge tooltip for issues watched by me"
+  },
+  "unknownProject": {
+    "message": "不明なプロジェクト",
+    "description": "Default text for unknown project"
+  },
+  "unknownAuthor": {
+    "message": "不明な作者",
+    "description": "Default text for unknown author"
+  },
+  "unknownStatus": {
+    "message": "不明なステータス",
+    "description": "Default text for unknown status"
+  },
+  "normalPriority": {
+    "message": "標準",
+    "description": "Default text for normal priority"
+  },
+  "retry": {
+    "message": "再試行",
+    "description": "Retry button text"
+  },
+  "missingRequiredSettings": {
+    "message": "必要な設定が不足しています",
+    "description": "Missing required settings error"
+  },
+  "connectionTimeout": {
+    "message": "接続タイムアウト - ネットワークを確認して再試行してください",
+    "description": "Connection timeout error message"
+  }
+}

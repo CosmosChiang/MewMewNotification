@@ -1,0 +1,406 @@
+{
+  "extName": {
+    "message": "MewMewNotification",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "接收您的 Redmine 議題和任務通知",
+    "description": "Extension description"
+  },
+  "popupTitle": {
+    "message": "MewMewNotification",
+    "description": "Popup window title"
+  },
+  "loadingText": {
+    "message": "載入通知中...",
+    "description": "Loading indicator text"
+  },
+  "noNotifications": {
+    "message": "沒有可用的通知",
+    "description": "Empty state message"
+  },
+  "loadError": {
+    "message": "載入通知失敗",
+    "description": "Error message when loading fails"
+  },
+  "markAllRead": {
+    "message": "全部標記為已讀",
+    "description": "Mark all read button tooltip"
+  },
+  "markAsRead": {
+    "message": "標記為已讀",
+    "description": "Mark as read button tooltip"
+  },
+  "settings": {
+    "message": "設定",
+    "description": "Settings button tooltip"
+  },
+  "justNow": {
+    "message": "剛才",
+    "description": "Time indicator for very recent notifications"
+  },
+  "minutesAgo": {
+    "message": "$1 分鐘前",
+    "description": "Time indicator for notifications from minutes ago"
+  },
+  "hoursAgo": {
+    "message": "$1 小時前",
+    "description": "Time indicator for notifications from hours ago"
+  },
+  "daysAgo": {
+    "message": "$1 天前",
+    "description": "Time indicator for notifications from days ago"
+  },
+  "updated": {
+    "message": "已更新",
+    "description": "Label shown for items that have been updated"
+  },
+  "optionsTitle": {
+    "message": "設定",
+    "description": "Options page title"
+  },
+  "redmineSettings": {
+    "message": "Redmine",
+    "description": "Redmine settings tab"
+  },
+  "notificationSettings": {
+    "message": "通知",
+    "description": "Notification settings tab"
+  },
+  "languageSettings": {
+    "message": "語言",
+    "description": "Language settings tab"
+  },
+  "about": {
+    "message": "關於",
+    "description": "About tab"
+  },
+  "redmineUrl": {
+    "message": "Redmine 網址：",
+    "description": "Redmine URL field label"
+  },
+  "redmineUrlHelp": {
+    "message": "輸入您的 Redmine 伺服器網址",
+    "description": "Redmine URL help text"
+  },
+  "redmineUrlPlaceholder": {
+    "message": "https://your-redmine-instance.com",
+    "description": "Redmine URL placeholder"
+  },
+  "apiKey": {
+    "message": "API 金鑰：",
+    "description": "API Key field label"
+  },
+  "apiKeyHelp": {
+    "message": "您可以在 Redmine 帳戶設定中找到您的 API 金鑰",
+    "description": "API Key help text"
+  },
+  "apiKeyPlaceholder": {
+    "message": "您的 Redmine API 金鑰",
+    "description": "API Key placeholder"
+  },
+  "testConnection": {
+    "message": "測試連線",
+    "description": "Test connection button"
+  },
+  "testing": {
+    "message": "測試中...",
+    "description": "Testing connection button text"
+  },
+  "testingConnection": {
+    "message": "測試連線中...",
+    "description": "Testing connection status message"
+  },
+  "connectionSuccess": {
+    "message": "連線成功！",
+    "description": "Successful connection message"
+  },
+  "connectionError": {
+    "message": "連線失敗",
+    "description": "Failed connection message"
+  },
+  "checkInterval": {
+    "message": "檢查間隔（分鐘）：",
+    "description": "Check interval field label"
+  },
+  "minute1": {
+    "message": "1 分鐘",
+    "description": "1 minute option"
+  },
+  "minutes5": {
+    "message": "5 分鐘",
+    "description": "5 minutes option"
+  },
+  "minutes10": {
+    "message": "10 分鐘",
+    "description": "10 minutes option"
+  },
+  "minutes15": {
+    "message": "15 分鐘",
+    "description": "15 minutes option"
+  },
+  "minutes30": {
+    "message": "30 分鐘",
+    "description": "30 minutes option"
+  },
+  "hour1": {
+    "message": "1 小時",
+    "description": "1 hour option"
+  },
+  "enableDesktopNotifications": {
+    "message": "啟用桌面通知",
+    "description": "Enable desktop notifications checkbox"
+  },
+  "enableNotificationSound": {
+    "message": "啟用通知音效",
+    "description": "Enable notification sound checkbox"
+  },
+  "onlyMyProjects": {
+    "message": "只顯示分配給我的議題",
+    "description": "Only my projects filter option"
+  },
+  "includeWatchedIssues": {
+    "message": "包含我觀察的議題",
+    "description": "Include watched issues option"
+  },
+  "maxNotifications": {
+    "message": "最大顯示通知數量：",
+    "description": "Max notifications field label"
+  },
+  "selectLanguage": {
+    "message": "選擇語言：",
+    "description": "Language selection field label"
+  },
+  "language_en": {
+    "message": "English",
+    "description": "English language option"
+  },
+  "language_zh_TW": {
+    "message": "繁體中文",
+    "description": "Traditional Chinese language option"
+  },
+  "language_zh_CN": {
+    "message": "简体中文",
+    "description": "Simplified Chinese language option"
+  },
+  "language_ja": {
+    "message": "日本語",
+    "description": "Japanese language option"
+  },
+  "appName": {
+    "message": "MewMewNotification",
+    "description": "Application name in about section"
+  },
+  "version": {
+    "message": "版本：1.0.0",
+    "description": "Version information"
+  },
+  "appDescription": {
+    "message": "MewMewNotification - 用於高效接收 Redmine 通知的 Chrome 擴充功能。",
+    "description": "Application description"
+  },
+  "features": {
+    "message": "功能：",
+    "description": "Features section title"
+  },
+  "feature1": {
+    "message": "即時通知檢查",
+    "description": "Feature 1 description"
+  },
+  "feature2": {
+    "message": "桌面通知與聲音提示",
+    "description": "Feature 2 description"
+  },
+  "feature3": {
+    "message": "標記通知為已讀",
+    "description": "Feature 3 description"
+  },
+  "feature4": {
+    "message": "清除所有通知",
+    "description": "Feature 4 description"
+  },
+  "feature5": {
+    "message": "直接連結到 Redmine 議題",
+    "description": "Feature 5 description"
+  },
+  "feature6": {
+    "message": "可自訂檢查間隔",
+    "description": "Feature 6 description"
+  },
+  "feature7": {
+    "message": "依分配議題過濾",
+    "description": "Feature 7 description"
+  },
+  "feature8": {
+    "message": "包含關注的議題",
+    "description": "Feature 8 description"
+  },
+  "feature9": {
+    "message": "多語言支援 (繁中/簡中/日文/英文)",
+    "description": "Feature 9 description"
+  },
+  "feature10": {
+    "message": "自動偵測議題更新",
+    "description": "Feature 10 description"
+  },
+  "feature11": {
+    "message": "未讀通知徽章計數器",
+    "description": "Feature 11 description"
+  },
+  "support": {
+    "message": "支援：",
+    "description": "Support section title"
+  },
+  "supportText": {
+    "message": "如果您遇到任何問題或有建議，請聯絡技術支援。",
+    "description": "Support section text"
+  },
+  "save": {
+    "message": "儲存設定",
+    "description": "Save button"
+  },
+  "saving": {
+    "message": "儲存中...",
+    "description": "Saving button text"
+  },
+  "reset": {
+    "message": "全部重設為預設值",
+    "description": "Reset all settings button"
+  },
+  "missingRequiredFields": {
+    "message": "請填寫所有必填欄位",
+    "description": "Missing required fields error"
+  },
+  "settingsSaved": {
+    "message": "設定儲存成功！",
+    "description": "Settings saved success message"
+  },
+  "saveError": {
+    "message": "儲存設定失敗",
+    "description": "Save settings error message"
+  },
+  "confirmReset": {
+    "message": "您確定要將所有設定重設為預設值嗎？",
+    "description": "Reset confirmation message"
+  },
+  "settingsReset": {
+    "message": "設定重設為預設值成功！",
+    "description": "Settings reset success message"
+  },
+  "resetError": {
+    "message": "重設設定失敗",
+    "description": "Reset settings error message"
+  },
+  "saveRedmineSettings": {
+    "message": "儲存 Redmine 設定",
+    "description": "Save Redmine settings button"
+  },
+  "saveNotificationSettings": {
+    "message": "儲存通知設定",
+    "description": "Save notification settings button"
+  },
+  "saveLanguageSettings": {
+    "message": "儲存語言設定",
+    "description": "Save language settings button"
+  },
+  "redmineSettingsSaved": {
+    "message": "Redmine 設定儲存成功！",
+    "description": "Redmine settings saved success message"
+  },
+  "notificationSettingsSaved": {
+    "message": "通知設定儲存成功！",
+    "description": "Notification settings saved success message"
+  },
+  "languageSettingsSaved": {
+    "message": "語言設定儲存成功！",
+    "description": "Language settings saved success message"
+  },
+  "refreshNotifications": {
+    "message": "立即刷新",
+    "description": "Refresh notifications button tooltip"
+  },
+  "clearAllNotifications": {
+    "message": "清除所有通知",
+    "description": "Clear all notifications button tooltip"
+  },
+  "clearAllConfirmation": {
+    "message": "您確定要清除所有通知嗎？此操作無法復原。",
+    "description": "Clear all notifications confirmation message"
+  },
+  "clearAllError": {
+    "message": "清除通知失敗，請稍後再試。",
+    "description": "Clear all notifications error message"
+  },
+  "urlRequired": {
+    "message": "Redmine URL 為必填欄位",
+    "description": "URL required validation message"
+  },
+  "urlMustBeHttpOrHttps": {
+    "message": "URL 必須以 http:// 或 https:// 開頭",
+    "description": "URL protocol validation message"
+  },
+  "invalidUrlFormat": {
+    "message": "無效的 URL 格式",
+    "description": "URL format validation message"
+  },
+  "apiKeyRequired": {
+    "message": "API 金鑰為必填欄位",
+    "description": "API key required validation message"
+  },
+  "apiKeyTooShort": {
+    "message": "API 金鑰至少需要 10 個字元",
+    "description": "API key length validation message"
+  },
+  "apiKeyTooLong": {
+    "message": "API 金鑰過長（最多 100 個字元）",
+    "description": "API key maximum length validation message"
+  },
+  "apiKeyInvalidFormat": {
+    "message": "API 金鑰只能包含字母和數字",
+    "description": "API key format validation message"
+  },
+  "mustBeNumber": {
+    "message": "$1 必須是有效的數字",
+    "description": "Number validation message"
+  },
+  "numberOutOfRange": {
+    "message": "$1 必須介於 $2 和 $3 之間",
+    "description": "Number range validation message"
+  },
+  "assignedToMe": {
+    "message": "分配給我的",
+    "description": "Badge tooltip for issues assigned to me"
+  },
+  "watchedByMe": {
+    "message": "我觀察的",
+    "description": "Badge tooltip for issues watched by me"
+  },
+  "unknownProject": {
+    "message": "未知專案",
+    "description": "Default text for unknown project"
+  },
+  "unknownAuthor": {
+    "message": "未知作者",
+    "description": "Default text for unknown author"
+  },
+  "unknownStatus": {
+    "message": "未知狀態",
+    "description": "Default text for unknown status"
+  },
+  "normalPriority": {
+    "message": "普通",
+    "description": "Default text for normal priority"
+  },
+  "retry": {
+    "message": "重試",
+    "description": "Retry button text"
+  },
+  "missingRequiredSettings": {
+    "message": "缺少必要的設定",
+    "description": "Missing required settings error"
+  },
+  "connectionTimeout": {
+    "message": "連線逾時 - 請檢查您的網路並重試",
+    "description": "Connection timeout error message"
+  }
+}

@@ -1,0 +1,418 @@
+{
+  "extName": {
+    "message": "MewMewNotification",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Get notified about your Redmine issues and tasks",
+    "description": "Extension description"
+  },
+  "popupTitle": {
+    "message": "MewMewNotification",
+    "description": "Popup window title"
+  },
+  "loadingText": {
+    "message": "Loading notifications...",
+    "description": "Loading indicator text"
+  },
+  "noNotifications": {
+    "message": "No notifications available",
+    "description": "Empty state message"
+  },
+  "loadError": {
+    "message": "Failed to load notifications",
+    "description": "Error message when loading fails"
+  },
+  "markAllRead": {
+    "message": "Mark all as read",
+    "description": "Mark all read button tooltip"
+  },
+  "markAsRead": {
+    "message": "Mark as read",
+    "description": "Mark as read button tooltip"
+  },
+  "settings": {
+    "message": "Settings",
+    "description": "Settings button tooltip"
+  },
+  "justNow": {
+    "message": "Just now",
+    "description": "Time indicator for very recent notifications"
+  },
+  "minutesAgo": {
+    "message": "$1 minutes ago",
+    "description": "Time indicator for notifications from minutes ago"
+  },
+  "hoursAgo": {
+    "message": "$1 hours ago",
+    "description": "Time indicator for notifications from hours ago"
+  },
+  "daysAgo": {
+    "message": "$1 days ago",
+    "description": "Time indicator for notifications from days ago"
+  },
+  "optionsTitle": {
+    "message": "Settings",
+    "description": "Options page title"
+  },
+  "redmineSettings": {
+    "message": "Redmine",
+    "description": "Redmine settings tab"
+  },
+  "notificationSettings": {
+    "message": "Notifications",
+    "description": "Notification settings tab"
+  },
+  "languageSettings": {
+    "message": "Language",
+    "description": "Language settings tab"
+  },
+  "about": {
+    "message": "About",
+    "description": "About tab"
+  },
+  "redmineUrl": {
+    "message": "Redmine URL:",
+    "description": "Redmine URL field label"
+  },
+  "redmineUrlHelp": {
+    "message": "Enter your Redmine server URL",
+    "description": "Redmine URL help text"
+  },
+  "redmineUrlPlaceholder": {
+    "message": "https://your-redmine-instance.com",
+    "description": "Redmine URL placeholder"
+  },
+  "apiKey": {
+    "message": "API Key:",
+    "description": "API Key field label"
+  },
+  "apiKeyHelp": {
+    "message": "You can find your API key in your Redmine account settings",
+    "description": "API Key help text"
+  },
+  "apiKeyPlaceholder": {
+    "message": "Your Redmine API key",
+    "description": "API Key placeholder"
+  },
+  "updated": {
+    "message": "Updated",
+    "description": "Label shown for items that have been updated"
+  },
+  "testConnection": {
+    "message": "Test Connection",
+    "description": "Test connection button"
+  },
+  "testing": {
+    "message": "Testing...",
+    "description": "Testing connection button text"
+  },
+  "testingConnection": {
+    "message": "Testing connection...",
+    "description": "Testing connection status message"
+  },
+  "connectionSuccess": {
+    "message": "Connection successful!",
+    "description": "Successful connection message"
+  },
+  "connectionError": {
+    "message": "Connection failed",
+    "description": "Failed connection message"
+  },
+  "checkInterval": {
+    "message": "Check Interval (minutes):",
+    "description": "Check interval field label"
+  },
+  "minute1": {
+    "message": "1 minute",
+    "description": "1 minute option"
+  },
+  "minutes5": {
+    "message": "5 minutes",
+    "description": "5 minutes option"
+  },
+  "minutes10": {
+    "message": "10 minutes",
+    "description": "10 minutes option"
+  },
+  "minutes15": {
+    "message": "15 minutes",
+    "description": "15 minutes option"
+  },
+  "minutes30": {
+    "message": "30 minutes",
+    "description": "30 minutes option"
+  },
+  "hour1": {
+    "message": "1 hour",
+    "description": "1 hour option"
+  },
+  "enableDesktopNotifications": {
+    "message": "Enable desktop notifications",
+    "description": "Enable desktop notifications checkbox"
+  },
+  "enableNotificationSound": {
+    "message": "Enable notification sound",
+    "description": "Enable notification sound checkbox"
+  },
+  "onlyMyProjects": {
+    "message": "Only show issues assigned to me",
+    "description": "Only my projects filter option"
+  },
+  "includeWatchedIssues": {
+    "message": "Include issues I'm watching",
+    "description": "Include watched issues option"
+  },
+  "maxNotifications": {
+    "message": "Maximum notifications to show:",
+    "description": "Max notifications field label"
+  },
+  "selectLanguage": {
+    "message": "Select Language:",
+    "description": "Language selection field label"
+  },
+  "language_en": {
+    "message": "English",
+    "description": "English language option"
+  },
+  "language_zh_TW": {
+    "message": "Traditional Chinese",
+    "description": "Traditional Chinese language option"
+  },
+  "language_zh_CN": {
+    "message": "Simplified Chinese",
+    "description": "Simplified Chinese language option"
+  },
+  "language_ja": {
+    "message": "Japanese",
+    "description": "Japanese language option"
+  },
+  "appName": {
+    "message": "MewMewNotification",
+    "description": "Application name in about section"
+  },
+  "version": {
+    "message": "Version: 1.0.0",
+    "description": "Version information"
+  },
+  "appDescription": {
+    "message": "MewMewNotification - Chrome extension for receiving Redmine notifications efficiently.",
+    "description": "Application description"
+  },
+  "features": {
+    "message": "Features:",
+    "description": "Features section title"
+  },
+  "feature1": {
+    "message": "Real-time notification checking",
+    "description": "Feature 1 description"
+  },
+  "feature2": {
+    "message": "Desktop notifications with sound alerts",
+    "description": "Feature 2 description"
+  },
+  "feature3": {
+    "message": "Mark notifications as read",
+    "description": "Feature 3 description"
+  },
+  "feature4": {
+    "message": "Clear all notifications",
+    "description": "Feature 4 description"
+  },
+  "feature5": {
+    "message": "Direct links to Redmine issues",
+    "description": "Feature 5 description"
+  },
+  "feature6": {
+    "message": "Customizable check intervals",
+    "description": "Feature 6 description"
+  },
+  "feature7": {
+    "message": "Filter by assigned issues",
+    "description": "Feature 7 description"
+  },
+  "feature8": {
+    "message": "Include watched issues",
+    "description": "Feature 8 description"
+  },
+  "feature9": {
+    "message": "Multi-language support (EN/ZH_TW/ZH_CN/JA)",
+    "description": "Feature 9 description"
+  },
+  "feature10": {
+    "message": "Auto-detect issue updates",
+    "description": "Feature 10 description"
+  },
+  "feature11": {
+    "message": "Badge counter for unread notifications",
+    "description": "Feature 11 description"
+  },
+  "support": {
+    "message": "Support:",
+    "description": "Support section title"
+  },
+  "supportText": {
+    "message": "If you encounter any issues or have suggestions, please contact support.",
+    "description": "Support section text"
+  },
+  "save": {
+    "message": "Save Settings",
+    "description": "Save button"
+  },
+  "saving": {
+    "message": "Saving...",
+    "description": "Saving button text"
+  },
+  "reset": {
+    "message": "Reset All to Default",
+    "description": "Reset all settings button"
+  },
+  "missingRequiredFields": {
+    "message": "Please fill in all required fields",
+    "description": "Missing required fields error"
+  },
+  "settingsSaved": {
+    "message": "Settings saved successfully!",
+    "description": "Settings saved success message"
+  },
+  "saveError": {
+    "message": "Failed to save settings",
+    "description": "Save settings error message"
+  },
+  "confirmReset": {
+    "message": "Are you sure you want to reset all settings to default?",
+    "description": "Reset confirmation message"
+  },
+  "settingsReset": {
+    "message": "Settings reset to default successfully!",
+    "description": "Settings reset success message"
+  },
+  "resetError": {
+    "message": "Failed to reset settings",
+    "description": "Reset settings error message"
+  },
+  "saveRedmineSettings": {
+    "message": "Save Redmine Settings",
+    "description": "Save Redmine settings button"
+  },
+  "saveNotificationSettings": {
+    "message": "Save Notification Settings",
+    "description": "Save notification settings button"
+  },
+  "saveLanguageSettings": {
+    "message": "Save Language Settings",
+    "description": "Save language settings button"
+  },
+  "redmineSettingsSaved": {
+    "message": "Redmine settings saved successfully!",
+    "description": "Redmine settings saved success message"
+  },
+  "notificationSettingsSaved": {
+    "message": "Notification settings saved successfully!",
+    "description": "Notification settings saved success message"
+  },
+  "languageSettingsSaved": {
+    "message": "Language settings saved successfully!",
+    "description": "Language settings saved success message"
+  },
+  "refreshNotifications": {
+    "message": "Refresh notifications",
+    "description": "Refresh notifications button tooltip"
+  },
+  "clearAllNotifications": {
+    "message": "Clear all notifications",
+    "description": "Clear all notifications button tooltip"
+  },
+  "clearAllConfirmation": {
+    "message": "Are you sure you want to clear all notifications? This action cannot be undone.",
+    "description": "Clear all notifications confirmation message"
+  },
+  "clearAllError": {
+    "message": "Failed to clear notifications. Please try again later.",
+    "description": "Clear all notifications error message"
+  },
+  "urlRequired": {
+    "message": "Redmine URL is required",
+    "description": "URL required validation message"
+  },
+  "urlMustBeHttpOrHttps": {
+    "message": "URL must start with http:// or https://",
+    "description": "URL protocol validation message"
+  },
+  "invalidUrlFormat": {
+    "message": "Invalid URL format",
+    "description": "URL format validation message"
+  },
+  "apiKeyRequired": {
+    "message": "API Key is required",
+    "description": "API key required validation message"
+  },
+  "apiKeyTooShort": {
+    "message": "API Key must be at least 10 characters long",
+    "description": "API key length validation message"
+  },
+  "apiKeyTooLong": {
+    "message": "API Key is too long (maximum 100 characters)",
+    "description": "API key maximum length validation message"
+  },
+  "apiKeyInvalidFormat": {
+    "message": "API Key must contain only letters, numbers, hyphens, and underscores",
+    "description": "API key format validation message"
+  },
+  "mustBeNumber": {
+    "message": "$1 must be a valid number",
+    "description": "Number validation message"
+  },
+  "numberOutOfRange": {
+    "message": "$1 must be between $2 and $3",
+    "description": "Number range validation message"
+  },
+  "by": {
+    "message": "by",
+    "description": "Author prefix"
+  },
+  "connectionRetrying": {
+    "message": "Connection failed. Retrying...",
+    "description": "Connection retry message"
+  },
+  "rateLimitWarning": {
+    "message": "API rate limit reached. Please wait.",
+    "description": "Rate limit warning message"
+  },
+  "assignedToMe": {
+    "message": "Assigned to me",
+    "description": "Badge tooltip for issues assigned to me"
+  },
+  "watchedByMe": {
+    "message": "Watched by me",
+    "description": "Badge tooltip for issues watched by me"
+  },
+  "unknownProject": {
+    "message": "Unknown Project",
+    "description": "Default text for unknown project"
+  },
+  "unknownAuthor": {
+    "message": "Unknown Author",
+    "description": "Default text for unknown author"
+  },
+  "unknownStatus": {
+    "message": "Unknown Status",
+    "description": "Default text for unknown status"
+  },
+  "normalPriority": {
+    "message": "Normal",
+    "description": "Default text for normal priority"
+  },
+  "retry": {
+    "message": "Retry",
+    "description": "Retry button text"
+  },
+  "missingRequiredSettings": {
+    "message": "Missing required settings",
+    "description": "Missing required settings error"
+  },
+  "connectionTimeout": {
+    "message": "Connection timeout - please check your network and try again",
+    "description": "Connection timeout error message"
+  }
+}
