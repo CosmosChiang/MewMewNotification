@@ -414,5 +414,33 @@
   "connectionTimeout": {
     "message": "Connection timeout - please check your network and try again",
     "description": "Connection timeout error message"
+  },
+  "issueUpdatedTitle": {
+    "message": "Issue Updated",
+    "description": "Title for single issue update notification"
+  },
+  "newIssueTitle": {
+    "message": "New Issue",
+    "description": "Title for new issue notification"
+  },
+  "issuesUpdatedTitle": {
+    "message": "Issues Updated",
+    "description": "Title for multiple issues update notification"
+  },
+  "newIssuesTitle": {
+    "message": "New Issues",
+    "description": "Title for multiple new issues notification"
+  },
+  "multipleIssuesUpdatedMessage": {
+    "message": "$1 issues have been updated",
+    "description": "Message for multiple issues update notification"
+  },
+  "multipleNewIssuesMessage": {
+    "message": "$1 new issues",
+    "description": "Message for multiple new issues notification"
+  },
+  "clickToViewAll": {
+    "message": "Click to view all",
+    "description": "Context message for batch notifications"
   }
 }

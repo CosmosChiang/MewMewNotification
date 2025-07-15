@@ -402,5 +402,33 @@
   "connectionTimeout": {
     "message": "接続タイムアウト - ネットワークを確認して再試行してください",
     "description": "Connection timeout error message"
+  },
+  "issueUpdatedTitle": {
+    "message": "課題が更新されました",
+    "description": "Title for single issue update notification"
+  },
+  "newIssueTitle": {
+    "message": "新しい課題",
+    "description": "Title for new issue notification"
+  },
+  "issuesUpdatedTitle": {
+    "message": "課題が更新されました",
+    "description": "Title for multiple issues update notification"
+  },
+  "newIssuesTitle": {
+    "message": "新しい課題",
+    "description": "Title for multiple new issues notification"
+  },
+  "multipleIssuesUpdatedMessage": {
+    "message": "$1件の課題が更新されました",
+    "description": "Message for multiple issues update notification"
+  },
+  "multipleNewIssuesMessage": {
+    "message": "$1件の新しい課題",
+    "description": "Message for multiple new issues notification"
+  },
+  "clickToViewAll": {
+    "message": "クリックしてすべて表示",
+    "description": "Context message for batch notifications"
   }
 }

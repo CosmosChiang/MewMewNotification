@@ -402,5 +402,33 @@
   "connectionTimeout": {
     "message": "連線逾時 - 請檢查您的網路並重試",
     "description": "Connection timeout error message"
+  },
+  "issueUpdatedTitle": {
+    "message": "議題已更新",
+    "description": "Title for single issue update notification"
+  },
+  "newIssueTitle": {
+    "message": "新議題",
+    "description": "Title for new issue notification"
+  },
+  "issuesUpdatedTitle": {
+    "message": "議題已更新",
+    "description": "Title for multiple issues update notification"
+  },
+  "newIssuesTitle": {
+    "message": "新議題",
+    "description": "Title for multiple new issues notification"
+  },
+  "multipleIssuesUpdatedMessage": {
+    "message": "$1個議題已更新",
+    "description": "Message for multiple issues update notification"
+  },
+  "multipleNewIssuesMessage": {
+    "message": "$1個新議題",
+    "description": "Message for multiple new issues notification"
+  },
+  "clickToViewAll": {
+    "message": "點擊查看全部",
+    "description": "Context message for batch notifications"
   }
 }

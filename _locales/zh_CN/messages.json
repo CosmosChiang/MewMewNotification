@@ -402,5 +402,33 @@
   "connectionTimeout": {
     "message": "连接超时 - 请检查您的网络并重试",
     "description": "Connection timeout error message"
+  },
+  "issueUpdatedTitle": {
+    "message": "问题已更新",
+    "description": "Title for single issue update notification"
+  },
+  "newIssueTitle": {
+    "message": "新问题",
+    "description": "Title for new issue notification"
+  },
+  "issuesUpdatedTitle": {
+    "message": "问题已更新",
+    "description": "Title for multiple issues update notification"
+  },
+  "newIssuesTitle": {
+    "message": "新问题",
+    "description": "Title for multiple new issues notification"
+  },
+  "multipleIssuesUpdatedMessage": {
+    "message": "$1个问题已更新",
+    "description": "Message for multiple issues update notification"
+  },
+  "multipleNewIssuesMessage": {
+    "message": "$1个新问题",
+    "description": "Message for multiple new issues notification"
+  },
+  "clickToViewAll": {
+    "message": "点击查看全部",
+    "description": "Context message for batch notifications"
   }
 }
