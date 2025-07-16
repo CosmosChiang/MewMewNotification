@@ -103,7 +103,7 @@ Use `OptionsManager.addLanguageOption('fr', 'Français')` to dynamically add a l
 - Project filter (show only issues assigned to me)
 - Include watched issues option
 - 30-second connection timeout protection
-- API key encryption storage
+- Secure API key storage
 - Language menu and names can be managed automatically
 
 ### Example Translation for Project Filter

@@ -330,22 +330,8 @@ class NotificationManager {
       'includeWatchedIssues'
     ]);
 
-    // Decrypt API key if it exists
-    let apiKey = result.apiKey || '';
-    if (apiKey) {
-      try {
-        const decryptedKey = await EncryptionUtils.decrypt(apiKey);
-        // Verify that the decryption was successful by checking if the result looks valid
-        if (decryptedKey && decryptedKey !== apiKey && decryptedKey.length >= 10) {
-          apiKey = decryptedKey;
-        } else {
-          // If decryption fails or result is invalid, treat as unencrypted
-          console.warn('API key decryption failed or returned invalid result, treating as plain text');
-        }
-      } catch (error) {
-        console.warn('Failed to decrypt API key, using as-is:', error);
-      }
-    }
+    // Use API key directly
+    const apiKey = result.apiKey || '';
 
     this.settings = {
       redmineUrl: result.redmineUrl || '',
@@ -637,78 +623,6 @@ class NotificationManager {
 
   getNotifications() {
     return Array.from(this.notifications.values()).sort((a, b) => b.updatedOn - a.updatedOn);
-  }
-}
-
-// Encryption utility for API key security (duplicate for background script)
-class EncryptionUtils {
-  // Simple encryption for browser storage (not for high-security scenarios)
-  static async encrypt(text) {
-    if (!text) return '';
-    
-    try {
-      // Generate a simple key based on user's storage
-      const key = await this.getOrCreateKey();
-      
-      // Simple XOR encryption with base64 encoding
-      let encrypted = '';
-      for (let i = 0; i < text.length; i++) {
-        encrypted += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-      }
-      
-      return btoa(encrypted);
-    } catch (error) {
-      console.error('Encryption failed:', error);
-      return text; // Fallback to unencrypted if encryption fails
-    }
-  }
-  
-  static async decrypt(encryptedText) {
-    if (!encryptedText) return '';
-    
-    try {
-      const key = await this.getOrCreateKey();
-      
-      // Decode from base64 and decrypt
-      const encrypted = atob(encryptedText);
-      let decrypted = '';
-      for (let i = 0; i < encrypted.length; i++) {
-        decrypted += String.fromCharCode(encrypted.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-      }
-      
-      return decrypted;
-    } catch (error) {
-      console.error('Decryption failed:', error);
-      return encryptedText; // Fallback to treating as unencrypted
-    }
-  }
-  
-  static async getOrCreateKey() {
-    // First try to get from local storage
-    let result = await chrome.storage.local.get(['encryptionKey']);
-    
-    if (result.encryptionKey) {
-      return result.encryptionKey;
-    }
-    
-    // If not found, try to get from sync storage (for cross-device sync)
-    result = await chrome.storage.sync.get(['encryptionKey']);
-    
-    if (result.encryptionKey) {
-      // Store in local storage for faster access
-      await chrome.storage.local.set({ encryptionKey: result.encryptionKey });
-      return result.encryptionKey;
-    }
-    
-    // Generate a new key
-    const key = Math.random().toString(36).substring(2, 15) + 
-               Math.random().toString(36).substring(2, 15) +
-               Date.now().toString(36);
-    
-    // Store in both local and sync storage
-    await chrome.storage.local.set({ encryptionKey: key });
-    await chrome.storage.sync.set({ encryptionKey: key });
-    return key;
   }
 }
 

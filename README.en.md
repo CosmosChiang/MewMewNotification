@@ -20,7 +20,7 @@ Below are screenshots of the main MewMewNotification interfaces:
 - Real-time Redmine issue updates with customizable check interval (1-60 minutes)
 - Desktop notifications and sound alerts, never miss important info
 - 30-second connection timeout protection to prevent hanging connections
-- Encrypted API key storage for enhanced security
+- Secure API key storage in browser's sync storage
 - One-click mark all notifications as read or clear all notifications
 - Multi-language interface (Traditional Chinese, Simplified Chinese, Japanese, English; easily extensible)
 - Direct links to Redmine issue pages for quick tracking
@@ -113,13 +113,12 @@ A: The extension has a 30-second connection timeout protection. If your Redmine 
 
 ### Q: Is my API key secure?
 
-A: Yes, your API key is stored using advanced AES-GCM encryption in your browser and supports cross-device sync. We implement multiple layers of security:
+A: Yes, your API key is stored securely in your browser's sync storage and supports cross-device sync. We implement multiple layers of security:
 
-- AES-GCM encryption via Web Crypto API
-- Random initialization vector (IV) for enhanced security
 - Strict input validation and filtering
 - XSS and injection attack protection
 - Content Security Policy (CSP)
+- Secure storage in browser's sync storage
 
 ### Q: How does the extension protect against security threats?
 
@@ -129,7 +128,7 @@ A: MewMewNotification implements comprehensive security measures:
 - **Input Validation**: Strictly validates all URLs, API keys, and config parameters
 - **API Security**: Whitelists accessible Redmine API endpoints
 - **Transport Security**: Strongly recommends HTTPS, rejects unsafe connections in production
-- **Encrypted Storage**: Sensitive data is protected with industry-standard encryption
+- **Secure Storage**: Sensitive data is stored securely in browser's sync storage
 
 ---
 

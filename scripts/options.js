@@ -48,22 +48,8 @@ class OptionsManager {
       'includeWatchedIssues'
     ]);
 
-    // Decrypt API key if it exists
-    let apiKey = result.apiKey || '';
-    if (apiKey && typeof EncryptionUtils !== 'undefined') {
-      try {
-        const decryptedKey = await EncryptionUtils.decrypt(apiKey);
-        // Verify that the decryption was successful by checking if the result looks valid
-        if (decryptedKey && decryptedKey !== apiKey && decryptedKey.length >= 10) {
-          apiKey = decryptedKey;
-        } else {
-          // If decryption fails or result is invalid, treat as unencrypted
-          console.warn('API key decryption failed or returned invalid result, treating as plain text');
-        }
-      } catch (error) {
-        console.warn('Failed to decrypt API key, using as-is:', error);
-      }
-    }
+    // Use API key directly
+    const apiKey = result.apiKey || '';
 
     this.settings = {
       redmineUrl: result.redmineUrl || '',
@@ -597,19 +583,12 @@ class OptionsManager {
       return;
     }
 
-    // Encrypt API key before saving
-    let encryptedApiKey = apiKey;
-    if (apiKey && typeof EncryptionUtils !== 'undefined') {
-      try {
-        encryptedApiKey = await EncryptionUtils.encrypt(apiKey);
-      } catch (error) {
-        console.warn('Failed to encrypt API key, saving as-is:', error);
-      }
-    }
+    // Use API key directly
+    const apiKeyToSave = apiKey;
 
     const redmineSettings = {
       redmineUrl: redmineUrl,
-      apiKey: encryptedApiKey
+      apiKey: apiKeyToSave
     };
 
     // Disable button and show loading
@@ -618,9 +597,9 @@ class OptionsManager {
 
     try {
       await chrome.storage.sync.set(redmineSettings);
-      // Update local settings (keep decrypted version in memory)
+      // Update local settings
       this.settings.redmineUrl = redmineUrl;
-      this.settings.apiKey = apiKey; // Store decrypted version in memory
+      this.settings.apiKey = apiKey;
       this.showStatus('redmineStatus', 'success', this.translate('redmineSettingsSaved'));
     } catch (error) {
       this.showStatus('redmineStatus', 'error', this.translate('saveError') + ': ' + this.sanitizeErrorMessage(error.message));
@@ -744,19 +723,12 @@ class OptionsManager {
       return;
     }
 
-    // Encrypt API key before saving
-    let encryptedApiKey = apiKey;
-    if (apiKey && typeof EncryptionUtils !== 'undefined') {
-      try {
-        encryptedApiKey = await EncryptionUtils.encrypt(apiKey);
-      } catch (error) {
-        console.warn('Failed to encrypt API key, saving as-is:', error);
-      }
-    }
+    // Use API key directly
+    const apiKeyToSave = apiKey;
 
     const settings = {
       redmineUrl: redmineUrl,
-      apiKey: encryptedApiKey,
+      apiKey: apiKeyToSave,
       checkInterval: checkIntervalValidation.value,
       enableNotifications: document.getElementById('enableNotifications').checked,
       enableSound: document.getElementById('enableSound').checked,
@@ -772,10 +744,10 @@ class OptionsManager {
 
     try {
       await chrome.storage.sync.set(settings);
-      // Update local settings (keep decrypted version in memory for immediate use)
+      // Update local settings
       this.settings = {
         ...settings,
-        apiKey: apiKey // Store decrypted version in memory
+        apiKey: apiKey
       };
       this.showStatus('saveStatus', 'success', this.translate('settingsSaved'));
     } catch (error) {
