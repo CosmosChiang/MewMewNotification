@@ -112,7 +112,7 @@ class RedmineAPI {
     if (!this.currentUser) {
       const response = await this.request('/users/current.json');
       this.currentUser = response.user;
-      console.log('Current user loaded:', this.currentUser);
+      console.log('Current user loaded:', { id: this.currentUser.id });
     }
     return this.currentUser;
   }
@@ -136,7 +136,7 @@ class RedmineAPI {
         assigned_to_id: currentUser.id
       });
       
-      console.log(`Fetching issues assigned to user: ${currentUser.name} (ID: ${currentUser.id})`);
+      console.log(`Fetching issues assigned to user: [USER_ID: ${currentUser.id}]`);
       const assignedResponse = await this.request(`/issues.json?${assignedParams}`);
       
       if (assignedResponse.issues) {
@@ -157,7 +157,7 @@ class RedmineAPI {
         watcher_id: currentUser.id
       });
       
-      console.log(`Fetching issues watched by user: ${currentUser.name} (ID: ${currentUser.id})`);
+      console.log(`Fetching issues watched by user: [USER_ID: ${currentUser.id}]`);
       const watchedResponse = await this.request(`/issues.json?${watchedParams}`);
       
       if (watchedResponse.issues) {
@@ -345,7 +345,16 @@ class NotificationManager {
       includeWatchedIssues: result.includeWatchedIssues === true // Default to false
     };
     
-    console.log('Settings loaded:', this.settings);
+    console.log('Settings loaded:', {
+      redmineUrl: this.settings.redmineUrl ? '[CONFIGURED]' : '[NOT_CONFIGURED]',
+      apiKey: this.settings.apiKey ? '[CONFIGURED]' : '[NOT_CONFIGURED]',
+      checkInterval: this.settings.checkInterval,
+      enableNotifications: this.settings.enableNotifications,
+      enableSound: this.settings.enableSound,
+      maxNotifications: this.settings.maxNotifications,
+      onlyMyProjects: this.settings.onlyMyProjects,
+      includeWatchedIssues: this.settings.includeWatchedIssues
+    });
   }
 
   async checkNotifications() {
@@ -355,7 +364,7 @@ class NotificationManager {
     }
 
     console.log('Checking notifications...', {
-      url: this.settings.redmineUrl,
+      url: this.settings.redmineUrl ? '[CONFIGURED]' : '[NOT_CONFIGURED]',
       interval: this.settings.checkInterval,
       enabled: this.settings.enableNotifications
     });
@@ -368,7 +377,11 @@ class NotificationManager {
         this.settings.includeWatchedIssues
       );
       
-      console.log('API response:', response);
+      console.log('API response:', { 
+        issueCount: response.issues?.length || 0, 
+        totalCount: response.total_count,
+        limit: response.limit
+      });
       console.log('Only my projects filter:', this.settings.onlyMyProjects);
       console.log('Include watched issues:', this.settings.includeWatchedIssues);
       
@@ -380,7 +393,7 @@ class NotificationManager {
       const result = await chrome.storage.local.get(['issueStates']);
       const previousIssueStates = result.issueStates || {};
 
-      console.log('Previous issue states:', previousIssueStates);
+      console.log('Previous issue states count:', Object.keys(previousIssueStates).length);
       console.log('Current issues count:', issues.length);
 
       // Clear error state if successful
@@ -525,7 +538,12 @@ class NotificationManager {
         contextMessage: `${notification.project}${isUpdate ? ' (' + this.translate('updated') + ')' : ''}`
       };
       
-      console.log('Creating notification with options:', notificationOptions);
+      console.log('Creating notification with options:', {
+        type: notificationOptions.type,
+        title: notificationOptions.title,
+        hasMessage: !!notificationOptions.message,
+        hasContextMessage: !!notificationOptions.contextMessage
+      });
       
       chrome.notifications.create(notificationOptions, (notificationId) => {
         if (chrome.runtime.lastError) {
@@ -545,7 +563,12 @@ class NotificationManager {
         contextMessage: this.translate('clickToViewAll')
       };
       
-      console.log('Creating batch notification with options:', notificationOptions);
+      console.log('Creating batch notification with options:', {
+        type: notificationOptions.type,
+        title: notificationOptions.title,
+        hasMessage: !!notificationOptions.message,
+        hasContextMessage: !!notificationOptions.contextMessage
+      });
       
       chrome.notifications.create(notificationOptions, (notificationId) => {
         if (chrome.runtime.lastError) {
@@ -645,7 +668,16 @@ function startPeriodicCheck() {
   notificationManager.loadSettings().then(() => {
     const intervalMinutes = notificationManager.settings.checkInterval || 15;
     console.log(`Starting periodic check with interval: ${intervalMinutes} minutes`);
-    console.log('Current settings:', notificationManager.settings);
+    console.log('Current settings:', {
+      redmineUrl: notificationManager.settings.redmineUrl ? '[CONFIGURED]' : '[NOT_CONFIGURED]',
+      apiKey: notificationManager.settings.apiKey ? '[CONFIGURED]' : '[NOT_CONFIGURED]',
+      checkInterval: notificationManager.settings.checkInterval,
+      enableNotifications: notificationManager.settings.enableNotifications,
+      enableSound: notificationManager.settings.enableSound,
+      maxNotifications: notificationManager.settings.maxNotifications,
+      onlyMyProjects: notificationManager.settings.onlyMyProjects,
+      includeWatchedIssues: notificationManager.settings.includeWatchedIssues
+    });
     
     // Create alarm for periodic checks
     chrome.alarms.create(ALARM_NAME, {
@@ -693,7 +725,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // Storage change listener to update settings and language
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === 'sync') {
-    console.log('Storage changes detected:', changes);
+    console.log('Storage changes detected:', Object.keys(changes));
     
     // Reload settings if any setting changed
     if (Object.keys(changes).some(key => ['redmineUrl', 'apiKey', 'checkInterval', 'enableNotifications', 'enableSound', 'maxNotifications', 'onlyMyProjects', 'includeWatchedIssues'].includes(key))) {
