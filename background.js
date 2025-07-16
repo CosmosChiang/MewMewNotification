@@ -537,14 +537,7 @@ class NotificationManager {
         message: notification.title,
         contextMessage: `${notification.project}${isUpdate ? ' (' + this.translate('updated') + ')' : ''}`
       };
-      
-      console.log('Creating notification with options:', {
-        type: notificationOptions.type,
-        title: notificationOptions.title,
-        hasMessage: !!notificationOptions.message,
-        hasContextMessage: !!notificationOptions.contextMessage
-      });
-      
+
       chrome.notifications.create(notificationOptions, (notificationId) => {
         if (chrome.runtime.lastError) {
           console.error('Failed to create notification:', chrome.runtime.lastError);
@@ -563,12 +556,7 @@ class NotificationManager {
         contextMessage: this.translate('clickToViewAll')
       };
       
-      console.log('Creating batch notification with options:', {
-        type: notificationOptions.type,
-        title: notificationOptions.title,
-        hasMessage: !!notificationOptions.message,
-        hasContextMessage: !!notificationOptions.contextMessage
-      });
+      // ...已移除除錯用 log...
       
       chrome.notifications.create(notificationOptions, (notificationId) => {
         if (chrome.runtime.lastError) {
