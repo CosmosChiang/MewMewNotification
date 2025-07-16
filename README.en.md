@@ -27,7 +27,6 @@ Below are screenshots of the main MewMewNotification interfaces:
 - Project filter: show only issues assigned to you, or include watched issues
 - Auto-detect issue updates with intelligent notification management
 - Badge counter for unread notification count
-- Modern UI with dark mode support
 
 ---
 
