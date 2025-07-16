@@ -386,9 +386,13 @@ class NotificationManager {
       // Clear error state if successful
       await chrome.storage.local.set({ lastError: null, lastErrorTime: null });
       
+      // Create a copy of readNotifications to avoid modifying the original during iteration
+      const readNotificationsCopy = [...this.settings.readNotifications];
+      const updatedReadNotifications = [...this.settings.readNotifications];
+      
       for (const issue of issues) {
         const notificationId = `issue_${issue.id}`;
-        const isRead = this.settings.readNotifications.includes(notificationId);
+        const isRead = readNotificationsCopy.includes(notificationId);
         const currentUpdateTime = new Date(issue.updated_on).getTime();
         const previousState = previousIssueStates[issue.id];
         
@@ -429,10 +433,9 @@ class NotificationManager {
             // If the issue was previously read but now updated, show notification again
             if (isRead) {
               // Remove from read notifications to make it appear as unread
-              const readIndex = this.settings.readNotifications.indexOf(notificationId);
+              const readIndex = updatedReadNotifications.indexOf(notificationId);
               if (readIndex > -1) {
-                this.settings.readNotifications.splice(readIndex, 1);
-                await chrome.storage.sync.set({ readNotifications: this.settings.readNotifications });
+                updatedReadNotifications.splice(readIndex, 1);
                 notification.read = false;
               }
             }
@@ -449,6 +452,12 @@ class NotificationManager {
           status: issue.status?.name,
           subject: issue.subject
         };
+      }
+      
+      // Update read notifications in storage only once after processing all issues
+      if (updatedReadNotifications.length !== this.settings.readNotifications.length) {
+        this.settings.readNotifications = updatedReadNotifications;
+        await chrome.storage.sync.set({ readNotifications: updatedReadNotifications });
       }
 
       // Save updated issue states
