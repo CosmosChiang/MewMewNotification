@@ -342,7 +342,7 @@ class NotificationManager {
       maxNotifications: result.maxNotifications || 50,
       readNotifications: result.readNotifications || [],
       onlyMyProjects: result.onlyMyProjects !== false, // Default to true (only my projects)
-      includeWatchedIssues: result.includeWatchedIssues === true // Default to false
+      includeWatchedIssues: result.includeWatchedIssues !== false // Default to true
     };
     
     console.log('Settings loaded:', {
