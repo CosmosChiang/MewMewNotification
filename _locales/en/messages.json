@@ -192,7 +192,7 @@
     "description": "Application name in about section"
   },
   "version": {
-    "message": "Version: 1.0.0",
+    "message": "Version: 1.0.1",
     "description": "Version information"
   },
   "appDescription": {
