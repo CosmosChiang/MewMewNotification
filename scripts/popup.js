@@ -3,6 +3,13 @@ class PopupManager {
     this.currentLanguage = 'en';
     this.translations = {};
     this.notifications = [];
+    this.renderQueue = [];
+    this.isRendering = false;
+    this.virtualScrollConfig = {
+      itemHeight: 80, // Approximate height of each notification item
+      bufferSize: 5,  // Number of items to render outside visible area
+      visibleItems: 10 // Number of items visible at once
+    };
     this.init();
   }
 
@@ -88,6 +95,31 @@ class PopupManager {
     }
   }
 
+  getNotificationTemplate() {
+    // Cache template for better performance
+    if (!this._notificationTemplate) {
+      this._notificationTemplate = document.createElement('div');
+      this._notificationTemplate.innerHTML = `
+        <div class="notification-content">
+          <div class="notification-title"></div>
+          <div class="notification-meta"></div>
+        </div>
+        <div class="notification-actions"></div>
+      `;
+    }
+    return this._notificationTemplate;
+  }
+
+  // Throttled render function for better performance
+  throttledRender() {
+    if (this.renderTimeout) {
+      clearTimeout(this.renderTimeout);
+    }
+    this.renderTimeout = setTimeout(() => {
+      this.renderNotifications();
+    }, 16); // ~60fps
+  }
+
   setupEventListeners() {
     // Settings button
     document.getElementById('settingsBtn').addEventListener('click', () => {
@@ -131,7 +163,7 @@ class PopupManager {
       if (response.success) {
         // Show all unread notifications (including updated ones)
         this.notifications = response.notifications.filter(notification => !notification.read);
-        this.renderNotifications();
+        this.throttledRender();
       } else {
         this.showError(response.error);
       }
@@ -176,12 +208,12 @@ class PopupManager {
     emptyState.style.display = 'none';
     notificationsList.style.display = 'block';
     
-    notificationsList.innerHTML = '';
-
-    this.notifications.forEach(notification => {
-      const notificationElement = this.createNotificationElement(notification);
-      notificationsList.appendChild(notificationElement);
-    });
+    // Use virtual scrolling for large notification lists
+    if (this.notifications.length > 20) {
+      this.renderVirtualScrollNotifications(notificationsList);
+    } else {
+      this.renderAllNotifications(notificationsList);
+    }
 
     // Update mark all read button visibility
     const hasUnread = this.notifications.some(n => !n.read);
@@ -189,19 +221,100 @@ class PopupManager {
     markAllBtn.style.display = hasUnread ? 'flex' : 'none';
   }
 
+  renderAllNotifications(container) {
+    // Use DocumentFragment for better performance
+    const fragment = document.createDocumentFragment();
+    
+    this.notifications.forEach(notification => {
+      const notificationElement = this.createNotificationElement(notification);
+      fragment.appendChild(notificationElement);
+    });
+    
+    // Clear and append all at once
+    container.innerHTML = '';
+    container.appendChild(fragment);
+  }
+
+  renderVirtualScrollNotifications(container) {
+    // Implement virtual scrolling for large lists
+    container.innerHTML = '';
+    container.style.height = '400px';
+    container.style.overflowY = 'auto';
+    
+    const virtualContainer = document.createElement('div');
+    virtualContainer.style.height = `${this.notifications.length * this.virtualScrollConfig.itemHeight}px`;
+    virtualContainer.style.position = 'relative';
+    
+    const viewportContainer = document.createElement('div');
+    viewportContainer.style.position = 'absolute';
+    viewportContainer.style.top = '0';
+    viewportContainer.style.left = '0';
+    viewportContainer.style.right = '0';
+    
+    virtualContainer.appendChild(viewportContainer);
+    container.appendChild(virtualContainer);
+    
+    // Initial render
+    this.updateVirtualScrollView(container, viewportContainer, 0);
+    
+    // Add scroll listener with throttling
+    let scrollTimeout;
+    container.addEventListener('scroll', () => {
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        const scrollTop = container.scrollTop;
+        this.updateVirtualScrollView(container, viewportContainer, scrollTop);
+      }, 16); // ~60fps
+    });
+  }
+
+  updateVirtualScrollView(container, viewportContainer, scrollTop) {
+    const { itemHeight, bufferSize } = this.virtualScrollConfig;
+    const containerHeight = container.clientHeight;
+    
+    const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - bufferSize);
+    const endIndex = Math.min(
+      this.notifications.length - 1,
+      Math.floor((scrollTop + containerHeight) / itemHeight) + bufferSize
+    );
+    
+    // Use DocumentFragment for batch DOM updates
+    const fragment = document.createDocumentFragment();
+    
+    for (let i = startIndex; i <= endIndex; i++) {
+      const notification = this.notifications[i];
+      const element = this.createNotificationElement(notification);
+      element.style.position = 'absolute';
+      element.style.top = `${i * itemHeight}px`;
+      element.style.left = '0';
+      element.style.right = '0';
+      element.style.height = `${itemHeight}px`;
+      fragment.appendChild(element);
+    }
+    
+    // Clear and update viewport
+    viewportContainer.innerHTML = '';
+    viewportContainer.appendChild(fragment);
+  }
+
   createNotificationElement(notification) {
-    const element = document.createElement('div');
+    // Use template cloning for better performance
+    let template = this.getNotificationTemplate();
+    const element = template.cloneNode(true);
+    
     element.className = `notification-item ${notification.read ? 'read' : ''} ${notification.isUpdated ? 'updated' : ''}`;
     element.dataset.notificationId = this.sanitizeAttribute(notification.id);
 
     const formattedDate = this.formatDate(notification.updatedOn);
     
-    // Create notification content using DOM manipulation instead of innerHTML
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'notification-content';
+    // Get template elements
+    const contentDiv = element.querySelector('.notification-content');
+    const titleDiv = element.querySelector('.notification-title');
+    const metaDiv = element.querySelector('.notification-meta');
+    const actionsDiv = element.querySelector('.notification-actions');
     
-    const titleDiv = document.createElement('div');
-    titleDiv.className = 'notification-title';
+    // Clear and rebuild title
+    titleDiv.innerHTML = '';
     
     // Add update indicator if needed
     if (notification.isUpdated) {
@@ -231,10 +344,8 @@ class PopupManager {
     const titleText = document.createTextNode(notification.title || '');
     titleDiv.appendChild(titleText);
     
-    const metaDiv = document.createElement('div');
-    metaDiv.className = 'notification-meta';
-    
-    // Add meta information safely
+    // Update meta information
+    metaDiv.innerHTML = '';
     const projectSpan = document.createElement('span');
     projectSpan.textContent = notification.project || '';
     metaDiv.appendChild(projectSpan);
@@ -254,12 +365,8 @@ class PopupManager {
       metaDiv.appendChild(updateText);
     }
     
-    contentDiv.appendChild(titleDiv);
-    contentDiv.appendChild(metaDiv);
-    
-    // Create actions div
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'notification-actions';
+    // Update actions
+    actionsDiv.innerHTML = '';
     
     if (!notification.read) {
       const markReadBtn = document.createElement('button');
@@ -279,9 +386,6 @@ class PopupManager {
       
       actionsDiv.appendChild(markReadBtn);
     }
-    
-    element.appendChild(contentDiv);
-    element.appendChild(actionsDiv);
 
     // Add click handler for the main notification area
     contentDiv.addEventListener('click', () => {

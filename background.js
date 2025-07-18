@@ -9,13 +9,51 @@ class RedmineAPI {
     this.isProcessing = false;
     this.lastRequestTime = 0;
     this.minRequestInterval = 1000; // 1 second between requests to prevent rate limiting
+    
+    // Performance optimization: cache management
+    this.cache = new Map();
+    this.cacheExpiry = new Map();
+    this.defaultCacheTime = 5 * 60 * 1000; // 5 minutes default cache
+    this.lastSyncTime = null;
+    this.incrementalSyncEnabled = true;
   }
 
   async request(endpoint, options = {}) {
+    // Check cache first for GET requests
+    if (!options.method || options.method === 'GET') {
+      const cacheKey = `${endpoint}_${JSON.stringify(options)}`;
+      const cached = this.getFromCache(cacheKey);
+      if (cached) {
+        console.log(`Cache hit for: ${endpoint}`);
+        return cached;
+      }
+    }
+
     return new Promise((resolve, reject) => {
       this.requestQueue.push({ endpoint, options, resolve, reject });
       this.processQueue();
     });
+  }
+
+  getFromCache(key) {
+    const expiry = this.cacheExpiry.get(key);
+    if (expiry && Date.now() < expiry) {
+      return this.cache.get(key);
+    }
+    // Clean expired cache
+    this.cache.delete(key);
+    this.cacheExpiry.delete(key);
+    return null;
+  }
+
+  setCache(key, value, ttl = this.defaultCacheTime) {
+    this.cache.set(key, value);
+    this.cacheExpiry.set(key, Date.now() + ttl);
+  }
+
+  clearCache() {
+    this.cache.clear();
+    this.cacheExpiry.clear();
   }
 
   async processQueue() {
@@ -38,6 +76,13 @@ class RedmineAPI {
       try {
         const result = await this.makeRequest(endpoint, options);
         this.lastRequestTime = Date.now();
+        
+        // Cache successful GET requests
+        if (!options.method || options.method === 'GET') {
+          const cacheKey = `${endpoint}_${JSON.stringify(options)}`;
+          this.setCache(cacheKey, result);
+        }
+        
         resolve(result);
       } catch (error) {
         reject(error);
@@ -80,7 +125,50 @@ class RedmineAPI {
       }
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Get response body for better error diagnosis
+        let errorDetails = '';
+        let errorBody = '';
+        try {
+          errorBody = await response.text();
+          if (errorBody) {
+            errorDetails = ` - ${errorBody}`;
+          }
+        } catch (e) {
+          // Ignore error reading response body
+        }
+        
+        // Handle specific HTTP status codes
+        if (response.status === 422) {
+          console.error('Redmine API returned 422 - Unprocessable Content. This usually means invalid parameters.');
+          console.error('Request URL:', response.url);
+          console.error('Response body:', errorBody);
+          
+          // Try to extract specific error information from response
+          let specificError = 'Invalid API parameters';
+          if (errorBody) {
+            try {
+              const errorJson = JSON.parse(errorBody);
+              if (errorJson.errors) {
+                specificError = Array.isArray(errorJson.errors) 
+                  ? errorJson.errors.join(', ') 
+                  : JSON.stringify(errorJson.errors);
+              }
+            } catch (e) {
+              // If not JSON, use the raw error body
+              specificError = errorBody.substring(0, 200); // Limit length
+            }
+          }
+          
+          throw new Error(`Invalid API parameters (HTTP 422): ${specificError}`);
+        } else if (response.status === 401) {
+          throw new Error('Authentication failed - please check your API key');
+        } else if (response.status === 403) {
+          throw new Error('Access forbidden - insufficient permissions');
+        } else if (response.status === 404) {
+          throw new Error('Resource not found - please check your Redmine URL');
+        }
+        
+        throw new Error(`HTTP ${response.status}: ${response.statusText}${errorDetails}`);
       }
 
       const result = await response.json();
@@ -110,78 +198,187 @@ class RedmineAPI {
 
   async getCurrentUser() {
     if (!this.currentUser) {
-      const response = await this.request('/users/current.json');
-      this.currentUser = response.user;
-      console.log('Current user loaded:', { id: this.currentUser.id });
+      try {
+        const response = await this.request('/users/current.json');
+        this.currentUser = response.user;
+        console.log('Current user loaded:', { id: this.currentUser.id });
+        
+        // Try to detect Redmine version from response headers or other means
+        // This helps us adapt API parameters for different Redmine versions
+        if (response.redmine_version) {
+          this.redmineVersion = response.redmine_version;
+          console.log('Detected Redmine version:', this.redmineVersion);
+        }
+      } catch (error) {
+        console.error('Failed to get current user:', error);
+        throw error;
+      }
     }
     return this.currentUser;
   }
 
-  async getIssues(limit = 50, onlyMyProjects = true, includeWatchedIssues = false) {
+  async getIssues(limit = 50, onlyMyProjects = true, includeWatchedIssues = false, useIncrementalSync = true) {
     const currentUser = await this.getCurrentUser();
     const allIssues = [];
     const seenIssueIds = new Set();
 
-    // Base parameters for all requests
+    // Base parameters for all requests - use only safe, well-supported parameters
     const baseParams = {
       status_id: 'open',
       sort: 'updated_on:desc',
-      limit: limit
+      limit: Math.min(Math.max(1, parseInt(limit) || 50), 100) // Ensure reasonable limit
     };
 
-    // Get assigned issues if onlyMyProjects is true
-    if (onlyMyProjects) {
-      const assignedParams = new URLSearchParams({
-        ...baseParams,
-        assigned_to_id: currentUser.id
-      });
-      
-      console.log(`Fetching issues assigned to user: [USER_ID: ${currentUser.id}]`);
-      const assignedResponse = await this.request(`/issues.json?${assignedParams}`);
-      
-      if (assignedResponse.issues) {
-        assignedResponse.issues.forEach(issue => {
-          if (!seenIssueIds.has(issue.id)) {
-            issue.sourceType = 'assigned'; // Mark the source
-            allIssues.push(issue);
-            seenIssueIds.add(issue.id);
+    // Smart incremental sync: only enable if we have successful previous sync data
+    if (useIncrementalSync && this.lastSyncTime) {
+      console.log('Incremental sync enabled with last sync time:', this.lastSyncTime);
+    } else {
+      console.log('Full sync mode: no previous sync data or incremental sync disabled');
+      useIncrementalSync = false;
+    }
+
+    console.log('API request parameters (base):', baseParams);
+
+    try {
+      // Get assigned issues if onlyMyProjects is true
+      if (onlyMyProjects) {
+        // Use only the most basic, well-supported parameters
+        const assignedParams = {
+          status_id: 'open',
+          assigned_to_id: parseInt(currentUser.id), // Ensure it's a number
+          sort: 'updated_on:desc',
+          limit: baseParams.limit
+        };
+        
+        console.log('Assigned issues request params:', assignedParams);
+        
+        // Convert to URLSearchParams with validation
+        const urlParams = new URLSearchParams();
+        Object.entries(assignedParams).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            urlParams.append(key, String(value));
           }
         });
+        
+        console.log(`Fetching issues assigned to user: [USER_ID: ${currentUser.id}]`);
+        console.log('Final URL params:', urlParams.toString());
+        
+        const assignedResponse = await this.request(`/issues.json?${urlParams.toString()}`);
+        
+        if (assignedResponse.issues) {
+          assignedResponse.issues.forEach(issue => {
+            if (!seenIssueIds.has(issue.id)) {
+              issue.sourceType = 'assigned'; // Mark the source
+              allIssues.push(issue);
+              seenIssueIds.add(issue.id);
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching assigned issues:', error);
+      
+      // If this is a 422 error, try with even simpler parameters
+      if (error.message.includes('422') && onlyMyProjects) {
+        console.warn('Trying simplified assigned issues request...');
+        try {
+          // Most basic request possible
+          const simpleParams = new URLSearchParams({
+            assigned_to_id: String(currentUser.id),
+            status_id: 'open'
+          });
+          
+          console.log('Simplified request params:', simpleParams.toString());
+          const fallbackResponse = await this.request(`/issues.json?${simpleParams.toString()}`);
+          
+          if (fallbackResponse.issues) {
+            fallbackResponse.issues.forEach(issue => {
+              if (!seenIssueIds.has(issue.id)) {
+                issue.sourceType = 'assigned';
+                allIssues.push(issue);
+                seenIssueIds.add(issue.id);
+              }
+            });
+          }
+          console.log('Simplified request succeeded');
+        } catch (fallbackError) {
+          console.error('Even simplified request failed:', fallbackError);
+          throw fallbackError;
+        }
+      } else {
+        throw error;
       }
     }
 
     // Get watched issues if includeWatchedIssues is true
     if (includeWatchedIssues) {
-      const watchedParams = new URLSearchParams({
-        ...baseParams,
-        watcher_id: currentUser.id
-      });
-      
-      console.log(`Fetching issues watched by user: [USER_ID: ${currentUser.id}]`);
-      const watchedResponse = await this.request(`/issues.json?${watchedParams}`);
-      
-      if (watchedResponse.issues) {
-        watchedResponse.issues.forEach(issue => {
-          if (!seenIssueIds.has(issue.id)) {
-            issue.sourceType = 'watched'; // Mark the source
-            allIssues.push(issue);
-            seenIssueIds.add(issue.id);
+      try {
+        // Use basic parameters for watched issues
+        const watchedParams = {
+          status_id: 'open',
+          watcher_id: parseInt(currentUser.id),
+          sort: 'updated_on:desc',
+          limit: baseParams.limit
+        };
+        
+        console.log('Watched issues request params:', watchedParams);
+        
+        const urlParams = new URLSearchParams();
+        Object.entries(watchedParams).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            urlParams.append(key, String(value));
           }
         });
+        
+        console.log(`Fetching issues watched by user: [USER_ID: ${currentUser.id}]`);
+        console.log('Watched URL params:', urlParams.toString());
+        
+        const watchedResponse = await this.request(`/issues.json?${urlParams.toString()}`);
+        
+        if (watchedResponse.issues) {
+          watchedResponse.issues.forEach(issue => {
+            if (!seenIssueIds.has(issue.id)) {
+              issue.sourceType = 'watched'; // Mark the source
+              allIssues.push(issue);
+              seenIssueIds.add(issue.id);
+            }
+          });
+        }
+      } catch (error) {
+        // Log warning but don't fail the entire operation for watched issues
+        console.warn('Failed to fetch watched issues (this is often expected if not supported):', error.message);
+        
+        // Some Redmine instances don't support watcher_id parameter
+        if (error.message.includes('422')) {
+          console.log('Watched issues may not be supported by this Redmine instance');
+        }
       }
     }
 
     // If neither filter is applied, get all open issues
     if (!onlyMyProjects && !includeWatchedIssues) {
-      const allParams = new URLSearchParams(baseParams);
-      console.log('Fetching all open issues');
-      const allResponse = await this.request(`/issues.json?${allParams}`);
-      
-      if (allResponse.issues) {
-        allResponse.issues.forEach(issue => {
-          issue.sourceType = 'all';
-          allIssues.push(issue);
+      try {
+        // Use very basic parameters for all issues
+        const allParams = new URLSearchParams({
+          status_id: 'open',
+          sort: 'updated_on:desc',
+          limit: String(baseParams.limit)
         });
+        
+        console.log('All issues request params:', allParams.toString());
+        console.log('Fetching all open issues');
+        
+        const allResponse = await this.request(`/issues.json?${allParams.toString()}`);
+        
+        if (allResponse.issues) {
+          allResponse.issues.forEach(issue => {
+            issue.sourceType = 'all';
+            allIssues.push(issue);
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching all issues:', error);
+        throw error;
       }
     }
 
@@ -266,6 +463,70 @@ class RedmineAPI {
     } catch (error) {
       throw new Error('Invalid base URL: ' + error.message);
     }
+  }
+
+  // Helper method to validate API parameters
+  validateApiParams(params) {
+    const validatedParams = {};
+    
+    for (const [key, value] of Object.entries(params)) {
+      // Skip undefined or null values
+      if (value === undefined || value === null) {
+        continue;
+      }
+      
+      // Validate specific parameter formats
+      switch (key) {
+        case 'updated_on':
+          // Ensure date format is valid
+          if (typeof value === 'string' && value.match(/^>=\d{4}-\d{2}-\d{2}/)) {
+            validatedParams[key] = value;
+          } else {
+            console.warn(`Invalid updated_on format: ${value}, skipping`);
+          }
+          break;
+          
+        case 'assigned_to_id':
+        case 'watcher_id':
+          // Ensure IDs are numeric
+          const numericId = parseInt(value);
+          if (!isNaN(numericId) && numericId > 0) {
+            validatedParams[key] = numericId;
+          } else {
+            console.warn(`Invalid ${key}: ${value}, skipping`);
+          }
+          break;
+          
+        case 'status_id':
+          // Allow 'open' or numeric values
+          if (value === 'open' || (!isNaN(parseInt(value)) && parseInt(value) > 0)) {
+            validatedParams[key] = value;
+          } else {
+            console.warn(`Invalid status_id: ${value}, using 'open'`);
+            validatedParams[key] = 'open';
+          }
+          break;
+          
+        case 'limit':
+          // Ensure limit is reasonable
+          const limit = parseInt(value);
+          if (!isNaN(limit) && limit > 0 && limit <= 1000) {
+            validatedParams[key] = limit;
+          } else {
+            console.warn(`Invalid limit: ${value}, using 50`);
+            validatedParams[key] = 50;
+          }
+          break;
+          
+        default:
+          // For other parameters, just ensure they're not empty
+          if (value !== '') {
+            validatedParams[key] = value;
+          }
+      }
+    }
+    
+    return validatedParams;
   }
 }
 
@@ -370,17 +631,40 @@ class NotificationManager {
     });
 
     try {
+      // Performance monitoring
+      const startTime = performance.now();
+      
       const api = new RedmineAPI(this.settings.redmineUrl, this.settings.apiKey);
+      
+      // Load last sync time from storage
+      const syncData = await chrome.storage.local.get(['lastSyncTime']);
+      if (syncData.lastSyncTime) {
+        api.lastSyncTime = new Date(syncData.lastSyncTime);
+      }
+      
       const response = await api.getIssues(
         this.settings.maxNotifications, 
         this.settings.onlyMyProjects,
-        this.settings.includeWatchedIssues
+        this.settings.includeWatchedIssues,
+        true // Enable incremental sync
       );
+      
+      // Update last sync time
+      const currentSyncTime = new Date();
+      api.lastSyncTime = currentSyncTime;
+      await chrome.storage.local.set({ lastSyncTime: currentSyncTime.toISOString() });
+      
+      const apiDuration = performance.now() - startTime;
+      if (apiDuration > 5000) {
+        console.warn(`Slow API response: ${apiDuration.toFixed(2)}ms`);
+      }
       
       console.log('API response:', { 
         issueCount: response.issues?.length || 0, 
         totalCount: response.total_count,
-        limit: response.limit
+        limit: response.limit,
+        incrementalSync: api.lastSyncTime ? 'enabled' : 'disabled',
+        duration: `${apiDuration.toFixed(2)}ms`
       });
       console.log('Only my projects filter:', this.settings.onlyMyProjects);
       console.log('Include watched issues:', this.settings.includeWatchedIssues);
@@ -504,16 +788,50 @@ class NotificationManager {
     } catch (error) {
       console.error('Failed to check notifications:', error);
       
+      // Handle specific error types
+      let errorMessage = error.message;
+      let shouldRetry = true;
+      
+      if (error.message.includes('422')) {
+        errorMessage = 'Invalid API parameters - check your Redmine configuration';
+        shouldRetry = false; // Don't retry 422 errors immediately
+        
+        // Clear incremental sync data to force full sync next time
+        await chrome.storage.local.remove(['lastSyncTime']);
+        console.log('Cleared incremental sync data due to 422 error');
+        
+      } else if (error.message.includes('401')) {
+        errorMessage = 'Authentication failed - please check your API key';
+        shouldRetry = false;
+        
+      } else if (error.message.includes('403')) {
+        errorMessage = 'Access forbidden - insufficient permissions';
+        shouldRetry = false;
+        
+      } else if (error.message.includes('404')) {
+        errorMessage = 'Resource not found - please check your Redmine URL';
+        shouldRetry = false;
+        
+      } else if (error.message.includes('connectionTimeout')) {
+        errorMessage = 'Connection timeout - Redmine server may be slow';
+        
+      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        errorMessage = 'Network error - check your internet connection';
+      }
+      
       // Store error information for debugging
       await chrome.storage.local.set({ 
-        lastError: error.message,
-        lastErrorTime: Date.now()
+        lastError: errorMessage,
+        lastErrorTime: Date.now(),
+        shouldRetry: shouldRetry
       });
       
       // Update badge to show error state
       chrome.action.setBadgeText({ text: '!' });
       chrome.action.setBadgeBackgroundColor({ color: '#ff4444' });
-      chrome.action.setTitle({ title: `Error: ${error.message}` });
+      chrome.action.setTitle({ title: `Error: ${errorMessage}` });
+      
+      console.log(`Error handling completed. Should retry: ${shouldRetry}`);
     }
   }
 
