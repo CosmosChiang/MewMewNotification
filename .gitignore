@@ -1,0 +1,41 @@
+# Node.js
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Coverage directory
+coverage/
+
+# Output of 'npm pack'
+*.tgz
+
+# VSCode settings
+.vscode/
+
+# Mac system files
+.crx
+.pem
+.zip
+.DS_Store
+
+# Windows system files
+Thumbs.db
+
+# Build output
+/dist/
+
+# Env files
+.env
+.env.*
