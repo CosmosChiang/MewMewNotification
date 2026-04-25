@@ -5,11 +5,14 @@ class I18nManager {
     this.translations = {};
   }
 
-  async loadLanguage() {
+  async loadLanguage(languageOverride) {
     try {
-      // Get language preference from settings
-      const result = await chrome.storage.sync.get(['language']);
-      this.currentLanguage = result.language || 'en';
+      if (languageOverride) {
+        this.currentLanguage = languageOverride;
+      } else {
+        const result = await chrome.storage.sync.get(['language']);
+        this.currentLanguage = result.language || 'en';
+      }
       
       // Load translations
       const response = await fetch(`_locales/${this.currentLanguage}/messages.json`);
@@ -18,16 +21,13 @@ class I18nManager {
       }
       
       this.translations = await response.json();
-      console.log(`Language loaded: ${this.currentLanguage}`);
-      
       return this.translations;
     } catch (error) {
       console.error('Failed to load language:', error);
       
       // Fallback to English if loading fails
       if (this.currentLanguage !== 'en') {
-        this.currentLanguage = 'en';
-        return await this.loadLanguage();
+        return this.loadLanguage('en');
       }
       
       // If even English fails, return empty object

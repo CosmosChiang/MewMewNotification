@@ -18,20 +18,29 @@ class OptionsManager {
     this.populateForm();
   }
 
-  async loadLanguage() {
+  async loadLanguage(languageOverride) {
     try {
-      const result = await chrome.storage.sync.get(['language']);
-      this.currentLanguage = result.language || 'en';
+      if (languageOverride) {
+        this.currentLanguage = languageOverride;
+      } else {
+        const result = await chrome.storage.sync.get(['language']);
+        this.currentLanguage = result.language || 'en';
+      }
       
       const response = await fetch(`_locales/${this.currentLanguage}/messages.json`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
       this.translations = await response.json();
+      return this.translations;
     } catch (error) {
       console.error('Failed to load language:', error);
       // Fallback to English if loading fails
       if (this.currentLanguage !== 'en') {
-        this.currentLanguage = 'en';
-        await this.loadLanguage();
+        return this.loadLanguage('en');
       }
+      this.translations = {};
+      return this.translations;
     }
   }
 
