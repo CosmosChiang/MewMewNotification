@@ -61,7 +61,7 @@ Below are screenshots of the main MewMewNotification interfaces:
    - Click "Load unpacked" and select the project folder
 4. After making changes, simply refresh the extension.
 5. To package for release:
-    - Zip the project folder
+    - Create a ZIP that only contains the files required to run the extension, such as `manifest.json`, the HTML files, `background.js`, `scripts/`, `styles/`, `icons/`, and `_locales/`
     - Upload to Chrome Web Store or distribute manually
 
 ## Testing & CI/CD
@@ -70,7 +70,8 @@ Below are screenshots of the main MewMewNotification interfaces:
 - `npm run test:local`: run the faster local test flow
 - `npm run test:ci`: run the CI-aligned test suite
 - `npm run test:coverage`: regenerate the coverage report
-- GitHub Actions runs multi-version Node.js tests, build validation, coverage upload, and release automation for pushes and PRs targeting `main`
+- GitHub Actions runs multi-version Node.js tests, validation, and extension packaging for pushes to `main` and PRs targeting `main`
+- Pushing a `v*` tag creates a GitHub Release with the packaged ZIP attached
 - See the [CI/CD Testing Guide](docs/CI_TESTING_GUIDE.md) for the full workflow details
 
 ## How to Contribute
