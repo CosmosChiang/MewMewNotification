@@ -2,11 +2,9 @@
 
 > This project supports a multi-language interface and can be easily extended as needed. All language files follow the Chrome extension standard format, and the language menu is generated dynamically.
 
----
+## Steps to Add a New Language
 
-## 📚 Steps to Add a New Language
-
-### 1. Create the Language File
+### Create the Language File
 
 Create a new folder and file at `_locales/{language_code}/messages.json`, for example:
 
@@ -20,11 +18,11 @@ _locales/
     └── messages.json
 ```
 
-### 2. Copy and Translate Content
+### Copy and Translate Content
 
 Copy the contents of `en/messages.json` to the new language file, and translate all `message` fields to the target language.
 
-### 3. Update the Language Menu
+### Update the Language Menu
 
 Add a new option to the `<select id="languageSelect">` in `options.html`:
 
@@ -32,7 +30,7 @@ Add a new option to the `<select id="languageSelect">` in `options.html`:
 <option value="{new_language_code}">{language_display_name}</option>
 ```
 
-### 4. Add Language Name Translation
+### Add Language Name Translation
 
 Add the new language name translation to all language files:
 
@@ -43,7 +41,7 @@ Add the new language name translation to all language files:
 }
 ```
 
-### 5. Automatic Handling by Script
+### Automatic Handling by Script
 
 `options.js` will automatically:
 
@@ -51,9 +49,7 @@ Add the new language name translation to all language files:
 - Display the corresponding language name based on the current language
 - Show the original name if translation is missing
 
----
-
-## 📝 Example: Add French (fr) Support
+## Example: Add French (fr) Support
 
 1. Create `_locales/fr/messages.json`
 2. Copy and translate `en/messages.json`
@@ -72,32 +68,24 @@ Add the new language name translation to all language files:
    }
    ```
 
----
-
-## ⚡ Advanced: Programmatically Add Languages
+## Advanced: Programmatically Add Languages
 
 Use `OptionsManager.addLanguageOption('fr', 'Français')` to dynamically add a language option. It will automatically check for duplicates and sort the menu.
 
----
-
-## 🔔 Notes
+## Notes
 
 - **Language Code**: Use standard language/region codes (e.g., `en`, `zh_TW`, `fr-CA`)
 - **Manifest**: `default_locale` in `manifest.json` must be correct
 - **Completeness**: Each language file must contain all translation keys
 - **Testing**: Fully test the interface and features after adding a new language
 
----
-
-## 🛠 Maintenance Tips
+## Maintenance Tips
 
 - Regularly check for new translation keys and sync to all languages
 - Use automation tools to compare language file structures
 - Use a JSON linter or translation tool to validate format
 
----
-
-## 🌟 Latest Features & Multi-Language Support
+## Latest Features & Multi-Language Support
 
 - Built-in: Traditional Chinese, Simplified Chinese, Japanese, English
 - Project filter (show only issues assigned to me)
@@ -118,9 +106,7 @@ Use `OptionsManager.addLanguageOption('fr', 'Français')` to dynamically add a l
 }
 ```
 
----
-
-## 💡 Tips
+## Tips
 
 - The language menu is auto-generated from manifest and _locales structure, no need to manually maintain the list
 - After adding a new language, test thoroughly in each language environment

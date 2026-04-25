@@ -1,0 +1,162 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting (if available)
+        run: npm run lint --if-present
+
+      - name: Run tests with coverage
+        run: npm run test:ci
+
+      - name: Upload coverage to Codecov
+        if: matrix.node-version == '20.x'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage/lcov.info
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate workflow helper
+        run: node validate-workflow.js
+
+      - name: Build extension
+        run: npm run build --if-present
+
+      - name: Validate manifest
+        run: |
+          if [ -f "manifest.json" ]; then
+            echo "Validating manifest.json..."
+            node -e "
+              const manifest = require('./manifest.json');
+              console.log('Manifest version:', manifest.version);
+              console.log('Extension name:', manifest.name);
+              if (!manifest.version || !manifest.name) {
+                process.exit(1);
+              }
+            "
+          fi
+
+      - name: Package extension
+        run: |
+          mkdir -p dist
+          zip -r dist/mewmew-notification-extension.zip . \
+            -x "node_modules/*" \
+            -x ".git/*" \
+            -x "coverage/*" \
+            -x "*.test.js" \
+            -x "test-setup.js" \
+            -x "jest.config.js" \
+            -x ".github/*" \
+            -x "*.md"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-package
+          path: dist/mewmew-notification-extension.zip
+          retention-days: 30
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-package
+          path: ./dist
+
+      - name: Get version from manifest
+        id: get_version
+        run: |
+          VERSION=$(node -e "console.log(require('./manifest.json').version)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION-${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: Release ${{ steps.get_version.outputs.tag }}
+          body: |
+            ## 🚀 自動發布版本 ${{ steps.get_version.outputs.version }}
+
+            ### 變更內容
+            - 自動建構並測試通過
+            - 包含所有最新功能和修復
+            - 單元測試覆蓋率已驗證
+
+            ### 安裝方式
+            1. 下載 `mewmew-notification-extension.zip`
+            2. 解壓縮檔案
+            3. 在 Chrome 瀏覽器中開啟擴充功能管理頁面
+            4. 啟用「開發人員模式」
+            5. 點擊「載入未封裝項目」並選擇解壓縮的資料夾
+
+            ### 測試狀態
+            - ✅ 單元測試: 通過
+            - ✅ 程式碼品質: 通過
+            - ✅ 建構流程: 成功
+          files: ./dist/mewmew-notification-extension.zip
+          draft: false
+          prerelease: false

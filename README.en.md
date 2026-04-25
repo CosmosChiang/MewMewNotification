@@ -1,10 +1,11 @@
 # MewMewNotification
 
+[![CI/CD Pipeline](https://github.com/CosmosChiang/MewMewNotification/actions/workflows/ci.yml/badge.svg)](https://github.com/CosmosChiang/MewMewNotification/actions/workflows/ci.yml)
+[![Test Coverage](https://codecov.io/gh/CosmosChiang/MewMewNotification/branch/main/graph/badge.svg)](https://codecov.io/gh/CosmosChiang/MewMewNotification)
+
 ![MewMewNotification Logo](icons/icon128.png)
 
 MewMewNotification is a simple, multi-language Chrome extension that instantly notifies you of Redmine issue updates, with flexible notification management and project filtering features.
-
----
 
 ## Screenshots
 
@@ -13,9 +14,7 @@ Below are screenshots of the main MewMewNotification interfaces:
 ![Options Page](docs/images/options.png)
 ![Popup Window](docs/images/popup.png)
 
----
-
-## 🚀 Main Features
+## Main Features
 
 - Real-time Redmine issue updates with customizable check interval (1-60 minutes)
 - Desktop notifications and sound alerts, never miss important info
@@ -28,9 +27,7 @@ Below are screenshots of the main MewMewNotification interfaces:
 - Auto-detect issue updates with intelligent notification management
 - Badge counter for unread notification count
 
----
-
-## 🛠 Installation & Setup
+## Installation & Setup
 
 1. Install from Chrome Web Store or load unpacked extension manually.
 2. Right-click the MewMewNotification icon in the browser toolbar and select "Options", or click the settings button in the popup window.
@@ -39,9 +36,7 @@ Below are screenshots of the main MewMewNotification interfaces:
 4. Set notification check interval, max notification count, language, project filter, etc.
 5. Save settings and click "Test Connection" to verify.
 
----
-
-## 🔔 Notification Management
+## Notification Management
 
 - Supports "Mark all as read" and "Clear all notifications":
   - **Mark all as read**: Marks all notifications as read, keeps history for later review.
@@ -50,17 +45,13 @@ Below are screenshots of the main MewMewNotification interfaces:
 - Manual refresh supported
 - Retry on notification failure and error prompts
 
----
-
-## 🌐 Multi-Language Support
+## Multi-Language Support
 
 - Built-in: Traditional Chinese, Simplified Chinese, Japanese, English
 - Easily add new languages via [Multi-Language Support Guide](docs/LANGUAGE_GUIDE.md)
 - Language menu auto-generated from manifest and _locales folder
 
----
-
-## 🧑‍💻 Developer Installation & Packaging
+## Developer Installation & Packaging
 
 1. Download or fork this repository.
 2. Run `npm install` in the project root (if package.json is present).
@@ -70,21 +61,26 @@ Below are screenshots of the main MewMewNotification interfaces:
    - Click "Load unpacked" and select the project folder
 4. After making changes, simply refresh the extension.
 5. To package for release:
-   - Zip the project folder
-   - Upload to Chrome Web Store or distribute manually
+    - Zip the project folder
+    - Upload to Chrome Web Store or distribute manually
 
----
+## Testing & CI/CD
 
-## 🤝 How to Contribute
+- `npm test`: run the full Jest suite and generate a coverage report
+- `npm run test:local`: run the faster local test flow
+- `npm run test:ci`: run the CI-aligned test suite
+- `npm run test:coverage`: regenerate the coverage report
+- GitHub Actions runs multi-version Node.js tests, build validation, coverage upload, and release automation for pushes and PRs targeting `main`
+- See the [CI/CD Testing Guide](docs/CI_TESTING_GUIDE.md) for the full workflow details
+
+## How to Contribute
 
 1. Fork the repository and create a new branch.
 2. Commit your changes (please include explanations and test cases if possible).
 3. Submit a Pull Request describing your changes.
 4. Maintainers will review and merge your contribution.
 
----
-
-## ❓ FAQ
+## FAQ
 
 ### Q: How do I get my API Key?
 
@@ -129,9 +125,7 @@ A: MewMewNotification implements comprehensive security measures:
 - **Transport Security**: Strongly recommends HTTPS, rejects unsafe connections in production
 - **Secure Storage**: Sensitive data is stored securely in browser's sync storage
 
----
-
-## 📄 License
+## License
 
 This project is licensed under the [MIT License](LICENSE).
 
