@@ -160,8 +160,10 @@ describe('OptionsManager', () => {
       message: 'urlRequired'
     });
     expect(manager.validateUrl('http://redmine.example.com')).toEqual({
-      valid: false,
-      message: 'httpsRequiredForRemoteUrls'
+      valid: true,
+      normalizedUrl: 'http://redmine.example.com',
+      warningMessage: 'insecureDevelopmentUrlWarning',
+      originPattern: 'http://redmine.example.com/*'
     });
     expect(manager.validateUrl('ftp://redmine.example.com')).toEqual({
       valid: false,
@@ -235,6 +237,21 @@ describe('OptionsManager', () => {
     expect(elements.redmineStatus.textContent).toBe('redmineSettingsSaved');
   });
 
+  test('shows a red warning state when saving an HTTP Redmine URL', async () => {
+    elements.redmineUrl.value = 'http://redmine.example.com';
+    global.chrome.permissions.contains.mockResolvedValue(false);
+    global.chrome.permissions.request.mockResolvedValue(true);
+    global.chrome.storage.sync.set.mockResolvedValue(undefined);
+    global.chrome.storage.local.set.mockResolvedValue(undefined);
+
+    await manager.saveRedmineSettings();
+
+    expect(elements.redmineStatus.className).toBe('status-message warning');
+    expect(elements.redmineStatus.textContent).toBe(
+      'redmineSettingsSaved insecureDevelopmentUrlWarning'
+    );
+  });
+
   test('requests host permission without including an explicit port', async () => {
     elements.redmineUrl.value = 'https://redmine.example.com:8443';
     global.chrome.permissions.contains.mockResolvedValue(false);
@@ -270,6 +287,22 @@ describe('OptionsManager', () => {
     });
   });
 
+  test('does not remove host access when only the Redmine path changes on the same origin', async () => {
+    elements.redmineUrl.value = 'https://redmine.example.com/redmine';
+    manager.settings.redmineUrl = 'https://redmine.example.com';
+    global.chrome.permissions.contains.mockResolvedValue(false);
+    global.chrome.permissions.request.mockResolvedValue(true);
+    global.chrome.storage.sync.set.mockResolvedValue(undefined);
+    global.chrome.storage.local.set.mockResolvedValue(undefined);
+
+    await manager.saveRedmineSettings();
+
+    expect(global.chrome.permissions.remove).not.toHaveBeenCalled();
+    expect(global.chrome.storage.sync.set).toHaveBeenCalledWith({
+      redmineUrl: 'https://redmine.example.com/redmine'
+    });
+  });
+
   test('shows validation errors before saving invalid notification settings', async () => {
     elements.checkInterval.value = '0';
 
@@ -301,6 +334,25 @@ describe('OptionsManager', () => {
     expect(global.chrome.runtime.sendMessage).not.toHaveBeenCalled();
     expect(elements.connectionStatus.className).toBe('status-message error');
     expect(elements.connectionStatus.textContent).toBe('hostPermissionDenied');
+  });
+
+  test('shows a red warning state when testing an HTTP Redmine URL succeeds', async () => {
+    elements.redmineUrl.value = 'http://redmine.example.com';
+    global.chrome.permissions.contains.mockResolvedValue(false);
+    global.chrome.permissions.request.mockResolvedValue(true);
+    global.chrome.runtime.sendMessage.mockResolvedValue({ success: true });
+
+    await manager.testConnection();
+
+    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith({
+      action: 'testConnection',
+      redmineUrl: 'http://redmine.example.com',
+      apiKey: 'valid-api-key-123'
+    });
+    expect(elements.connectionStatus.className).toBe('status-message warning');
+    expect(elements.connectionStatus.textContent).toBe(
+      'connectionSuccess insecureDevelopmentUrlWarning'
+    );
   });
 
   test('migrates legacy API key from sync storage into local settings', async () => {

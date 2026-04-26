@@ -54,8 +54,8 @@ describe('ConfigManager', () => {
         expect(ConfigManager.isValidUrl('https://test.com/redmine')).toBe(true);
       });
 
-      test('should only return true for local development HTTP URLs', () => {
-        expect(ConfigManager.isValidUrl('http://redmine.example.com')).toBe(false);
+      test('should return true for supported HTTP URLs', () => {
+        expect(ConfigManager.isValidUrl('http://redmine.example.com')).toBe(true);
         expect(ConfigManager.isValidUrl('http://localhost:3000')).toBe(true);
         expect(ConfigManager.isValidUrl('http://127.0.0.1:3000')).toBe(true);
       });
@@ -196,18 +196,31 @@ describe('ConfigManager', () => {
     });
 
     describe('validateRedmineUrl', () => {
-      test('should reject insecure remote HTTP URLs', () => {
+      test('should allow remote HTTP URLs with warning metadata', () => {
         expect(ConfigManager.validateRedmineUrl('http://redmine.example.com')).toEqual({
-          valid: false,
-          messageKey: 'httpsRequiredForRemoteUrls'
+          valid: true,
+          normalizedUrl: 'http://redmine.example.com',
+          originPattern: 'http://redmine.example.com/*',
+          requiresWarning: true,
+          messageKey: 'insecureDevelopmentUrlWarning'
         });
       });
 
-      test('should allow development HTTP URLs with warning metadata', () => {
+      test('should allow HTTP localhost URLs with warning metadata', () => {
         expect(ConfigManager.validateRedmineUrl('http://localhost:3000')).toEqual({
           valid: true,
           normalizedUrl: 'http://localhost:3000',
           originPattern: 'http://localhost/*',
+          requiresWarning: true,
+          messageKey: 'insecureDevelopmentUrlWarning'
+        });
+      });
+
+      test('should allow IPv6 localhost development HTTP URLs with bracketed origin patterns', () => {
+        expect(ConfigManager.validateRedmineUrl('http://[::1]:3000')).toEqual({
+          valid: true,
+          normalizedUrl: 'http://[::1]:3000',
+          originPattern: 'http://[::1]/*',
           requiresWarning: true,
           messageKey: 'insecureDevelopmentUrlWarning'
         });

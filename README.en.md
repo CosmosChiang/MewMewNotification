@@ -33,8 +33,7 @@ Below are screenshots of the main MewMewNotification interfaces:
 2. Right-click the MewMewNotification icon in the browser toolbar and select "Options", or click the settings button in the popup window.
 3. Enter your Redmine server URL and API Key in the settings page.
    - API Key can be found in your Redmine account settings page.
-   - Remote Redmine servers must use HTTPS.
-   - `http://localhost` and `http://127.0.0.1` are only allowed for local development and show an insecure connection warning.
+   - HTTPS is recommended; if you use HTTP, the extension will still connect but show a red insecure-connection warning.
 4. Set notification check interval, max notification count, language, project filter, etc.
 5. Save settings and click "Test Connection" to verify.
    - If you upgraded from an older release, save the Redmine settings again once so the extension can request the new per-origin host permission.
@@ -129,7 +128,7 @@ A: MewMewNotification implements comprehensive security measures:
 - **XSS Protection**: Uses safe DOM operations and escapes all user input
 - **Input Validation**: Strictly validates all URLs, API keys, and config parameters
 - **API Security**: Whitelists accessible Redmine API endpoints
-- **Transport Security**: Requires HTTPS for remote servers and only allows HTTP for explicit local development exceptions
+- **Transport Security**: Strongly recommends HTTPS and clearly warns when a server is configured over HTTP
 - **Least Privilege**: Requests host access only for the configured Redmine origin
 - **Secure Storage**: Sensitive data is stored in local extension storage only
 

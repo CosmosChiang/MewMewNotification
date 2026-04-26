@@ -116,27 +116,47 @@ class OptionsManager {
     return `${this.translate(successKey)} ${warningMessage}`;
   }
 
-  // Validation methods
-  validateUrl(url) {
+  getValidatedUrlDetails(url) {
     const configManagerClass = this.getConfigManagerClass();
-    if (!configManagerClass?.validateRedmineUrl) {
-      if (!url || url.trim() === '') {
-        return { valid: false, message: this.translate('urlRequired') };
-      }
-
-      try {
-        const urlObj = new URL(url);
-        if (!['http:', 'https:'].includes(urlObj.protocol)) {
-          return { valid: false, message: this.translate('urlMustBeHttpOrHttps') };
-        }
-
-        return { valid: true };
-      } catch (error) {
-        return { valid: false, message: this.translate('invalidUrlFormat') };
-      }
+    if (configManagerClass?.validateRedmineUrl) {
+      return configManagerClass.validateRedmineUrl(url);
     }
 
-    const validation = configManagerClass.validateRedmineUrl(url);
+    if (!url || url.trim() === '') {
+      return {
+        valid: false,
+        messageKey: 'urlRequired'
+      };
+    }
+
+    try {
+      const urlObj = new URL(url.trim());
+      if (!['http:', 'https:'].includes(urlObj.protocol)) {
+        return {
+          valid: false,
+          messageKey: 'urlMustBeHttpOrHttps'
+        };
+      }
+
+      const normalizedUrl = urlObj.toString().replace(/\/$/, '');
+      return {
+        valid: true,
+        normalizedUrl,
+        originPattern: `${urlObj.protocol}//${urlObj.hostname}/*`,
+        requiresWarning: urlObj.protocol === 'http:',
+        messageKey: urlObj.protocol === 'http:' ? 'insecureDevelopmentUrlWarning' : undefined
+      };
+    } catch {
+      return {
+        valid: false,
+        messageKey: 'invalidUrlFormat'
+      };
+    }
+  }
+
+  // Validation methods
+  validateUrl(url) {
+    const validation = this.getValidatedUrlDetails(url);
     if (!validation.valid) {
       return {
         valid: false,
@@ -177,10 +197,7 @@ class OptionsManager {
   }
 
   async ensureOriginPermission(redmineUrl) {
-    const configManagerClass = this.getConfigManagerClass();
-    const validation = configManagerClass?.validateRedmineUrl
-      ? configManagerClass.validateRedmineUrl(redmineUrl)
-      : { valid: true, originPattern: `${new URL(redmineUrl).origin}/*`, requiresWarning: false };
+    const validation = this.getValidatedUrlDetails(redmineUrl);
 
     if (!validation.valid) {
       return {
@@ -250,6 +267,21 @@ class OptionsManager {
     }
 
     return chrome.permissions.remove(permissionRequest);
+  }
+
+  shouldRemoveOriginPermission(previousUrl, nextUrl) {
+    if (!previousUrl || !nextUrl) {
+      return false;
+    }
+
+    const previousValidation = this.getValidatedUrlDetails(previousUrl);
+    const nextValidation = this.getValidatedUrlDetails(nextUrl);
+
+    if (!previousValidation.valid || !nextValidation.valid) {
+      return false;
+    }
+
+    return previousValidation.originPattern !== nextValidation.originPattern;
   }
 
   async syncConfiguredPermissionStatus() {
@@ -676,6 +708,7 @@ class OptionsManager {
       this.showStatus('connectionStatus', 'error', urlValidation.message);
       return;
     }
+    const normalizedUrl = urlValidation.normalizedUrl;
 
     // Validate API key format
     const apiKeyValidation = this.validateApiKey(apiKey);
@@ -692,7 +725,7 @@ class OptionsManager {
     statusDiv.style.display = 'block';
 
     try {
-      const permissionResult = await this.ensureOriginPermission(redmineUrl);
+      const permissionResult = await this.ensureOriginPermission(normalizedUrl);
       if (!permissionResult.granted) {
         this.showStatus('connectionStatus', 'error', permissionResult.message);
         return;
@@ -700,14 +733,14 @@ class OptionsManager {
 
       const response = await chrome.runtime.sendMessage({
         action: 'testConnection',
-        redmineUrl: redmineUrl,
+        redmineUrl: normalizedUrl,
         apiKey: apiKey
       });
 
       if (response.success) {
         this.showStatus(
           'connectionStatus',
-          permissionResult.warningMessage ? 'info' : 'success',
+          permissionResult.warningMessage ? 'warning' : 'success',
           this.buildStatusMessage('connectionSuccess', permissionResult.warningMessage)
         );
       } else {
@@ -748,6 +781,7 @@ class OptionsManager {
       this.showStatus('redmineStatus', 'error', urlValidation.message);
       return;
     }
+    const normalizedUrl = urlValidation.normalizedUrl;
 
     // Validate API key format
     const apiKeyValidation = this.validateApiKey(apiKey);
@@ -757,7 +791,7 @@ class OptionsManager {
     }
 
     // Additional security check for URL
-    if (!this.isValidRedmineUrl(redmineUrl)) {
+    if (!this.isValidRedmineUrl(normalizedUrl)) {
       this.showStatus('redmineStatus', 'error', this.translate('invalidRedmineUrl'));
       return;
     }
@@ -770,7 +804,7 @@ class OptionsManager {
     button.textContent = this.translate('saving');
 
     try {
-      const permissionResult = await this.ensureOriginPermission(redmineUrl);
+      const permissionResult = await this.ensureOriginPermission(normalizedUrl);
       if (!permissionResult.granted) {
         this.showStatus('redmineStatus', 'error', permissionResult.message);
         return;
@@ -780,11 +814,11 @@ class OptionsManager {
       const configManagerClass = this.getConfigManagerClass();
       const { syncSettings, localSettings } = configManagerClass?.splitSettingsBySensitivity
         ? configManagerClass.splitSettingsBySensitivity({
-            redmineUrl: redmineUrl,
+            redmineUrl: normalizedUrl,
             apiKey: apiKeyToSave
           })
         : {
-            syncSettings: { redmineUrl: redmineUrl },
+            syncSettings: { redmineUrl: normalizedUrl },
             localSettings: { apiKey: apiKeyToSave }
           };
 
@@ -793,16 +827,16 @@ class OptionsManager {
         chrome.storage.local.set(localSettings)
       ]);
 
-      if (previousUrl && previousUrl !== redmineUrl) {
+      if (this.shouldRemoveOriginPermission(previousUrl, normalizedUrl)) {
         await this.removeOriginPermission(previousUrl);
       }
 
       // Update local settings
-      this.settings.redmineUrl = redmineUrl;
+      this.settings.redmineUrl = normalizedUrl;
       this.settings.apiKey = apiKey;
       this.showStatus(
         'redmineStatus',
-        permissionResult.warningMessage ? 'info' : 'success',
+        permissionResult.warningMessage ? 'warning' : 'success',
         this.buildStatusMessage('redmineSettingsSaved', permissionResult.warningMessage)
       );
     } catch (error) {
@@ -905,6 +939,7 @@ class OptionsManager {
       this.showStatus('saveStatus', 'error', urlValidation.message);
       return;
     }
+    const normalizedUrl = urlValidation.normalizedUrl;
 
     // Validate API key format
     const apiKeyValidation = this.validateApiKey(apiKey);
@@ -928,7 +963,7 @@ class OptionsManager {
     }
 
     const settings = {
-      redmineUrl: redmineUrl,
+      redmineUrl: normalizedUrl,
       apiKey: apiKey,
       checkInterval: checkIntervalValidation.value,
       enableNotifications: document.getElementById('enableNotifications').checked,
@@ -944,7 +979,7 @@ class OptionsManager {
     button.textContent = this.translate('saving');
 
     try {
-      const permissionResult = await this.ensureOriginPermission(redmineUrl);
+      const permissionResult = await this.ensureOriginPermission(normalizedUrl);
       if (!permissionResult.granted) {
         this.showStatus('saveStatus', 'error', permissionResult.message);
         return;
@@ -968,7 +1003,7 @@ class OptionsManager {
         chrome.storage.local.set(localSettings)
       ]);
 
-      if (previousUrl && previousUrl !== redmineUrl) {
+      if (this.shouldRemoveOriginPermission(previousUrl, normalizedUrl)) {
         await this.removeOriginPermission(previousUrl);
       }
 
@@ -979,7 +1014,7 @@ class OptionsManager {
       };
       this.showStatus(
         'saveStatus',
-        permissionResult.warningMessage ? 'info' : 'success',
+        permissionResult.warningMessage ? 'warning' : 'success',
         this.buildStatusMessage('settingsSaved', permissionResult.warningMessage)
       );
     } catch (error) {
@@ -1105,7 +1140,7 @@ class OptionsManager {
   isValidRedmineUrl(url) {
     const configManagerClass = this.getConfigManagerClass();
     if (!configManagerClass?.validateRedmineUrl) {
-      return false;
+      return this.getValidatedUrlDetails(url).valid;
     }
 
     return configManagerClass.validateRedmineUrl(url).valid;

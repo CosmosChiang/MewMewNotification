@@ -348,8 +348,8 @@
     "description": "Remote HTTP Redmine URLs are not allowed"
   },
   "insecureDevelopmentUrlWarning": {
-    "message": "ローカル開発用の HTTP URL は許可されますが、この接続は安全ではありません",
-    "description": "Warning for local development HTTP URLs"
+    "message": "HTTP URL は許可されますが、この接続は安全ではありません",
+    "description": "Warning for insecure HTTP URLs"
   },
   "apiKeyRequired": {
     "message": "API キーは必須です",

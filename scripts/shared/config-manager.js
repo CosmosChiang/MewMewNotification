@@ -132,19 +132,12 @@ class ConfigManager {
         };
       }
 
-      if (this.isDevelopmentHost(urlObj.hostname)) {
-        return {
-          valid: true,
-          normalizedUrl,
-          originPattern,
-          requiresWarning: true,
-          messageKey: 'insecureDevelopmentUrlWarning'
-        };
-      }
-
       return {
-        valid: false,
-        messageKey: 'httpsRequiredForRemoteUrls'
+        valid: true,
+        normalizedUrl,
+        originPattern,
+        requiresWarning: true,
+        messageKey: 'insecureDevelopmentUrlWarning'
       };
     } catch {
       return {

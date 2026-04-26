@@ -348,8 +348,8 @@
     "description": "Remote HTTP Redmine URLs are not allowed"
   },
   "insecureDevelopmentUrlWarning": {
-    "message": "僅允許本機開發環境使用 HTTP，且此連線不安全",
-    "description": "Warning for local development HTTP URLs"
+    "message": "允許使用 HTTP URL，但此連線不安全",
+    "description": "Warning for insecure HTTP URLs"
   },
   "apiKeyRequired": {
     "message": "API 金鑰為必填欄位",
