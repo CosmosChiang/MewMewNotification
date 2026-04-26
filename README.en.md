@@ -19,7 +19,7 @@ Below are screenshots of the main MewMewNotification interfaces:
 - Real-time Redmine issue updates with customizable check interval (1-60 minutes)
 - Desktop notifications and sound alerts, never miss important info
 - 30-second connection timeout protection to prevent hanging connections
-- Secure API key storage in browser's sync storage
+- Secure API key storage in local extension storage only, without cross-device sync
 - One-click mark all notifications as read or clear all notifications
 - Multi-language interface (Traditional Chinese, Simplified Chinese, Japanese, English; easily extensible)
 - Direct links to Redmine issue pages for quick tracking
@@ -33,8 +33,10 @@ Below are screenshots of the main MewMewNotification interfaces:
 2. Right-click the MewMewNotification icon in the browser toolbar and select "Options", or click the settings button in the popup window.
 3. Enter your Redmine server URL and API Key in the settings page.
    - API Key can be found in your Redmine account settings page.
+   - HTTPS is recommended; if you use HTTP, the extension will still connect but show a red insecure-connection warning.
 4. Set notification check interval, max notification count, language, project filter, etc.
 5. Save settings and click "Test Connection" to verify.
+   - If you upgraded from an older release, save the Redmine settings again once so the extension can request the new per-origin host permission.
 
 ## Notification Management
 
@@ -70,7 +72,9 @@ Below are screenshots of the main MewMewNotification interfaces:
 - `npm run test:local`: run the faster local test flow
 - `npm run test:ci`: run the CI-aligned test suite
 - `npm run test:coverage`: regenerate the coverage report
+- `npm run audit:high`: fail on high / critical dependency vulnerabilities
 - GitHub Actions runs multi-version Node.js tests, validation, and extension packaging for pushes to `main` and PRs targeting `main`
+- GitHub Actions runs `npm run audit:high` in the Node.js `20.x` job to block high-severity dependency issues
 - Pushing a `v*` tag creates a GitHub Release with the packaged ZIP attached
 - See the [CI/CD Testing Guide](docs/CI_TESTING_GUIDE.md) for the full workflow details
 
@@ -89,7 +93,8 @@ A: Log in to Redmine, click "My Account" in the top right, and find the API Key 
 
 ### Q: Why am I not receiving notifications?
 
-A: Check that your Redmine URL and API Key are correct, and that your browser allows notifications for this extension. You can click "Test Connection" to verify your settings.
+A: Check that your Redmine URL and API Key are correct, and that the extension has host access for the configured Redmine origin. You can click "Test Connection" to verify your settings.
+If you upgraded from an older release, open Options and save the Redmine settings again.
 
 ### Q: How do I only see issues assigned to me?
 
@@ -109,12 +114,12 @@ A: The extension has a 30-second connection timeout protection. If your Redmine 
 
 ### Q: Is my API key secure?
 
-A: Yes, your API key is stored securely in your browser's sync storage and supports cross-device sync. We implement multiple layers of security:
+A: Your API key is stored only in local extension storage and is not synced across devices. We implement multiple layers of security:
 
 - Strict input validation and filtering
 - XSS and injection attack protection
 - Content Security Policy (CSP)
-- Secure storage in browser's sync storage
+- Separate storage for sensitive credentials and synced preferences
 
 ### Q: How does the extension protect against security threats?
 
@@ -123,8 +128,9 @@ A: MewMewNotification implements comprehensive security measures:
 - **XSS Protection**: Uses safe DOM operations and escapes all user input
 - **Input Validation**: Strictly validates all URLs, API keys, and config parameters
 - **API Security**: Whitelists accessible Redmine API endpoints
-- **Transport Security**: Strongly recommends HTTPS, rejects unsafe connections in production
-- **Secure Storage**: Sensitive data is stored securely in browser's sync storage
+- **Transport Security**: Strongly recommends HTTPS and clearly warns when a server is configured over HTTP
+- **Least Privilege**: Requests host access only for the configured Redmine origin
+- **Secure Storage**: Sensitive data is stored in local extension storage only
 
 ## License
 

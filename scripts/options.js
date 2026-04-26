@@ -3,6 +3,7 @@ class OptionsManager {
     this.currentLanguage = 'en';
     this.translations = {};
     this.settings = {};
+    this.statusHideTimers = new Map();
     this.init();
   }
 
@@ -16,6 +17,7 @@ class OptionsManager {
     
     this.updateUI();
     this.populateForm();
+    await this.syncConfiguredPermissionStatus();
   }
 
   async loadLanguage(languageOverride) {
@@ -45,9 +47,14 @@ class OptionsManager {
   }
 
   async loadSettings() {
-    const result = await chrome.storage.sync.get([
+    const configManagerClass = this.getConfigManagerClass();
+    if (configManagerClass?.migrateLegacyApiKey) {
+      await configManagerClass.migrateLegacyApiKey();
+    }
+
+    const [syncResult, localResult] = await Promise.all([
+      chrome.storage.sync.get([
       'redmineUrl',
-      'apiKey',
       'checkInterval',
       'enableNotifications',
       'enableSound',
@@ -55,21 +62,22 @@ class OptionsManager {
       'language',
       'onlyMyProjects',
       'includeWatchedIssues'
+      ]),
+      chrome.storage.local.get(['apiKey'])
     ]);
 
-    // Use API key directly
-    const apiKey = result.apiKey || '';
+    const apiKey = localResult.apiKey || '';
 
     this.settings = {
-      redmineUrl: result.redmineUrl || '',
+      redmineUrl: syncResult.redmineUrl || '',
       apiKey: apiKey,
-      checkInterval: result.checkInterval || 15,
-      enableNotifications: result.enableNotifications !== false,
-      enableSound: result.enableSound !== false,
-      maxNotifications: result.maxNotifications || 50,
-      language: result.language || 'en',
-      onlyMyProjects: result.onlyMyProjects !== false, // Default to true
-      includeWatchedIssues: result.includeWatchedIssues === true // Default to false
+      checkInterval: syncResult.checkInterval || 15,
+      enableNotifications: syncResult.enableNotifications !== false,
+      enableSound: syncResult.enableSound !== false,
+      maxNotifications: syncResult.maxNotifications || 50,
+      language: syncResult.language || 'en',
+      onlyMyProjects: syncResult.onlyMyProjects !== false,
+      includeWatchedIssues: syncResult.includeWatchedIssues === true
     };
   }
 
@@ -87,27 +95,81 @@ class OptionsManager {
     return message;
   }
 
+  getConfigManagerClass() {
+    return globalThis.ConfigManager || undefined;
+  }
+
+  resolveErrorMessage(message) {
+    const translated = this.translate(message);
+    if (translated !== message) {
+      return translated;
+    }
+
+    return this.sanitizeErrorMessage(message);
+  }
+
+  buildStatusMessage(successKey, warningMessage) {
+    if (!warningMessage) {
+      return this.translate(successKey);
+    }
+
+    return `${this.translate(successKey)} ${warningMessage}`;
+  }
+
+  getValidatedUrlDetails(url) {
+    const configManagerClass = this.getConfigManagerClass();
+    if (configManagerClass?.validateRedmineUrl) {
+      return configManagerClass.validateRedmineUrl(url);
+    }
+
+    if (!url || url.trim() === '') {
+      return {
+        valid: false,
+        messageKey: 'urlRequired'
+      };
+    }
+
+    try {
+      const urlObj = new URL(url.trim());
+      if (!['http:', 'https:'].includes(urlObj.protocol)) {
+        return {
+          valid: false,
+          messageKey: 'urlMustBeHttpOrHttps'
+        };
+      }
+
+      const normalizedUrl = urlObj.toString().replace(/\/$/, '');
+      return {
+        valid: true,
+        normalizedUrl,
+        originPattern: `${urlObj.protocol}//${urlObj.hostname}/*`,
+        requiresWarning: urlObj.protocol === 'http:',
+        messageKey: urlObj.protocol === 'http:' ? 'insecureDevelopmentUrlWarning' : undefined
+      };
+    } catch {
+      return {
+        valid: false,
+        messageKey: 'invalidUrlFormat'
+      };
+    }
+  }
+
   // Validation methods
   validateUrl(url) {
-    if (!url || url.trim() === '') {
-      return { valid: false, message: this.translate('urlRequired') };
+    const validation = this.getValidatedUrlDetails(url);
+    if (!validation.valid) {
+      return {
+        valid: false,
+        message: this.translate(validation.messageKey)
+      };
     }
-    
-    try {
-      const urlObj = new URL(url);
-      if (!['http:', 'https:'].includes(urlObj.protocol)) {
-        return { valid: false, message: this.translate('urlMustBeHttpOrHttps') };
-      }
-      
-      // Check for common invalid patterns
-      if (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') {
-        console.warn('Using localhost URL - ensure Redmine is accessible');
-      }
-      
-      return { valid: true };
-    } catch (error) {
-      return { valid: false, message: this.translate('invalidUrlFormat') };
-    }
+
+    return {
+      valid: true,
+      normalizedUrl: validation.normalizedUrl,
+      warningMessage: validation.requiresWarning ? this.translate(validation.messageKey) : undefined,
+      originPattern: validation.originPattern
+    };
   }
 
   validateApiKey(apiKey) {
@@ -132,6 +194,136 @@ class OptionsManager {
     }
     
     return { valid: true };
+  }
+
+  async ensureOriginPermission(redmineUrl) {
+    const validation = this.getValidatedUrlDetails(redmineUrl);
+
+    if (!validation.valid) {
+      return {
+        granted: false,
+        message: this.translate(validation.messageKey)
+      };
+    }
+
+    const warningMessage = validation.requiresWarning
+      ? this.translate(validation.messageKey)
+      : undefined;
+
+    if (!chrome.permissions?.contains || !chrome.permissions?.request) {
+      return {
+        granted: true,
+        warningMessage
+      };
+    }
+
+    const permissionRequest = {
+      origins: [validation.originPattern]
+    };
+
+    const alreadyGranted = await chrome.permissions.contains(permissionRequest);
+    if (alreadyGranted) {
+      return {
+        granted: true,
+        warningMessage
+      };
+    }
+
+    const granted = await chrome.permissions.request(permissionRequest);
+    if (!granted) {
+      return {
+        granted: false,
+        message: this.translate('hostPermissionDenied')
+      };
+    }
+
+    return {
+      granted: true,
+      warningMessage
+    };
+  }
+
+  async removeOriginPermission(redmineUrl) {
+    if (!redmineUrl || !chrome.permissions?.contains || !chrome.permissions?.remove) {
+      return false;
+    }
+
+    const configManagerClass = this.getConfigManagerClass();
+    const validation = configManagerClass?.validateRedmineUrl
+      ? configManagerClass.validateRedmineUrl(redmineUrl)
+      : undefined;
+
+    if (!validation?.valid) {
+      return false;
+    }
+
+    const permissionRequest = {
+      origins: [validation.originPattern]
+    };
+
+    const alreadyGranted = await chrome.permissions.contains(permissionRequest);
+    if (!alreadyGranted) {
+      return false;
+    }
+
+    return chrome.permissions.remove(permissionRequest);
+  }
+
+  shouldRemoveOriginPermission(previousUrl, nextUrl) {
+    if (!previousUrl || !nextUrl) {
+      return false;
+    }
+
+    const previousValidation = this.getValidatedUrlDetails(previousUrl);
+    const nextValidation = this.getValidatedUrlDetails(nextUrl);
+
+    if (!previousValidation.valid || !nextValidation.valid) {
+      return false;
+    }
+
+    return previousValidation.originPattern !== nextValidation.originPattern;
+  }
+
+  async syncConfiguredPermissionStatus() {
+    const statusElement = document.getElementById('redmineStatus');
+    if (!statusElement) {
+      return;
+    }
+
+    const missingPermissionMessage = this.translate('hostPermissionRequired');
+    this.clearStatusTimer('redmineStatus');
+
+    if (!this.settings.redmineUrl || !this.settings.apiKey || !chrome.permissions?.contains) {
+      if (statusElement.textContent === missingPermissionMessage) {
+        statusElement.style.display = 'none';
+      }
+      return;
+    }
+
+    const configManagerClass = this.getConfigManagerClass();
+    const validation = configManagerClass?.validateRedmineUrl
+      ? configManagerClass.validateRedmineUrl(this.settings.redmineUrl)
+      : undefined;
+
+    if (!validation?.valid || !validation.originPattern) {
+      if (statusElement.textContent === missingPermissionMessage) {
+        statusElement.style.display = 'none';
+      }
+      return;
+    }
+
+    const hasPermission = await chrome.permissions.contains({
+      origins: [validation.originPattern]
+    });
+
+    if (!hasPermission) {
+      this.showPersistentStatus('redmineStatus', 'info', missingPermissionMessage);
+      return;
+    }
+
+    if (statusElement.textContent === missingPermissionMessage) {
+      statusElement.style.display = 'none';
+    }
   }
 
 
@@ -507,7 +699,7 @@ class OptionsManager {
     const statusDiv = document.getElementById('connectionStatus');
     
     // Get current form values
-    const redmineUrl = document.getElementById('redmineUrl').value.trim();
+    const redmineUrl = this.sanitizeInput(document.getElementById('redmineUrl').value);
     const apiKey = document.getElementById('apiKey').value.trim();
     
     // Validate URL format
@@ -516,6 +708,7 @@ class OptionsManager {
       this.showStatus('connectionStatus', 'error', urlValidation.message);
       return;
     }
+    const normalizedUrl = urlValidation.normalizedUrl;
 
     // Validate API key format
     const apiKeyValidation = this.validateApiKey(apiKey);
@@ -532,16 +725,26 @@ class OptionsManager {
     statusDiv.style.display = 'block';
 
     try {
+      const permissionResult = await this.ensureOriginPermission(normalizedUrl);
+      if (!permissionResult.granted) {
+        this.showStatus('connectionStatus', 'error', permissionResult.message);
+        return;
+      }
+
       const response = await chrome.runtime.sendMessage({
         action: 'testConnection',
-        redmineUrl: redmineUrl,
+        redmineUrl: normalizedUrl,
         apiKey: apiKey
       });
 
       if (response.success) {
-        this.showStatus('connectionStatus', 'success', this.translate('connectionSuccess'));
+        this.showStatus(
+          'connectionStatus',
+          permissionResult.warningMessage ? 'warning' : 'success',
+          this.buildStatusMessage('connectionSuccess', permissionResult.warningMessage)
+        );
       } else {
-        let errorMessage = this.translate('connectionError') + ': ' + response.error;
+        let errorMessage = this.translate('connectionError') + ': ' + this.resolveErrorMessage(response.error);
         
         // Handle specific error types
         if (response.error === 'connectionTimeout') {
@@ -551,7 +754,7 @@ class OptionsManager {
         this.showStatus('connectionStatus', 'error', errorMessage);
       }
     } catch (error) {
-      let errorMessage = this.translate('connectionError') + ': ' + error.message;
+      let errorMessage = this.translate('connectionError') + ': ' + this.resolveErrorMessage(error.message);
       
       // Handle specific error types
       if (error.message === 'connectionTimeout') {
@@ -578,6 +781,7 @@ class OptionsManager {
       this.showStatus('redmineStatus', 'error', urlValidation.message);
       return;
     }
+    const normalizedUrl = urlValidation.normalizedUrl;
 
     // Validate API key format
     const apiKeyValidation = this.validateApiKey(apiKey);
@@ -587,7 +791,7 @@ class OptionsManager {
     }
 
     // Additional security check for URL
-    if (!this.isValidRedmineUrl(redmineUrl)) {
+    if (!this.isValidRedmineUrl(normalizedUrl)) {
       this.showStatus('redmineStatus', 'error', this.translate('invalidRedmineUrl'));
       return;
     }
@@ -595,21 +799,46 @@ class OptionsManager {
     // Use API key directly
     const apiKeyToSave = apiKey;
 
-    const redmineSettings = {
-      redmineUrl: redmineUrl,
-      apiKey: apiKeyToSave
-    };
-
     // Disable button and show loading
     button.disabled = true;
     button.textContent = this.translate('saving');
 
     try {
-      await chrome.storage.sync.set(redmineSettings);
+      const permissionResult = await this.ensureOriginPermission(normalizedUrl);
+      if (!permissionResult.granted) {
+        this.showStatus('redmineStatus', 'error', permissionResult.message);
+        return;
+      }
+
+      const previousUrl = this.settings.redmineUrl;
+      const configManagerClass = this.getConfigManagerClass();
+      const { syncSettings, localSettings } = configManagerClass?.splitSettingsBySensitivity
+        ? configManagerClass.splitSettingsBySensitivity({
+            redmineUrl: normalizedUrl,
+            apiKey: apiKeyToSave
+          })
+        : {
+            syncSettings: { redmineUrl: normalizedUrl },
+            localSettings: { apiKey: apiKeyToSave }
+          };
+
+      await Promise.all([
+        chrome.storage.sync.set(syncSettings),
+        chrome.storage.local.set(localSettings)
+      ]);
+
+      if (this.shouldRemoveOriginPermission(previousUrl, normalizedUrl)) {
+        await this.removeOriginPermission(previousUrl);
+      }
+
       // Update local settings
-      this.settings.redmineUrl = redmineUrl;
+      this.settings.redmineUrl = normalizedUrl;
       this.settings.apiKey = apiKey;
-      this.showStatus('redmineStatus', 'success', this.translate('redmineSettingsSaved'));
+      this.showStatus(
+        'redmineStatus',
+        permissionResult.warningMessage ? 'warning' : 'success',
+        this.buildStatusMessage('redmineSettingsSaved', permissionResult.warningMessage)
+      );
     } catch (error) {
       this.showStatus('redmineStatus', 'error', this.translate('saveError') + ': ' + this.sanitizeErrorMessage(error.message));
     } finally {
@@ -699,7 +928,7 @@ class OptionsManager {
     const button = document.getElementById('saveBtn');
     
     // Get form values
-    const redmineUrl = document.getElementById('redmineUrl').value.trim();
+    const redmineUrl = this.sanitizeInput(document.getElementById('redmineUrl').value);
     const apiKey = document.getElementById('apiKey').value.trim();
     const checkIntervalValue = document.getElementById('checkInterval').value;
     const maxNotificationsValue = document.getElementById('maxNotifications').value;
@@ -710,6 +939,7 @@ class OptionsManager {
       this.showStatus('saveStatus', 'error', urlValidation.message);
       return;
     }
+    const normalizedUrl = urlValidation.normalizedUrl;
 
     // Validate API key format
     const apiKeyValidation = this.validateApiKey(apiKey);
@@ -732,12 +962,9 @@ class OptionsManager {
       return;
     }
 
-    // Use API key directly
-    const apiKeyToSave = apiKey;
-
     const settings = {
-      redmineUrl: redmineUrl,
-      apiKey: apiKeyToSave,
+      redmineUrl: normalizedUrl,
+      apiKey: apiKey,
       checkInterval: checkIntervalValidation.value,
       enableNotifications: document.getElementById('enableNotifications').checked,
       enableSound: document.getElementById('enableSound').checked,
@@ -752,13 +979,44 @@ class OptionsManager {
     button.textContent = this.translate('saving');
 
     try {
-      await chrome.storage.sync.set(settings);
+      const permissionResult = await this.ensureOriginPermission(normalizedUrl);
+      if (!permissionResult.granted) {
+        this.showStatus('saveStatus', 'error', permissionResult.message);
+        return;
+      }
+
+      const previousUrl = this.settings.redmineUrl;
+      const configManagerClass = this.getConfigManagerClass();
+      const { syncSettings, localSettings } = configManagerClass?.splitSettingsBySensitivity
+        ? configManagerClass.splitSettingsBySensitivity(settings)
+        : {
+            syncSettings: { ...settings, apiKey: undefined },
+            localSettings: { apiKey: apiKey }
+          };
+
+      if (syncSettings.apiKey === undefined) {
+        delete syncSettings.apiKey;
+      }
+
+      await Promise.all([
+        chrome.storage.sync.set(syncSettings),
+        chrome.storage.local.set(localSettings)
+      ]);
+
+      if (this.shouldRemoveOriginPermission(previousUrl, normalizedUrl)) {
+        await this.removeOriginPermission(previousUrl);
+      }
+
       // Update local settings
       this.settings = {
         ...settings,
         apiKey: apiKey
       };
-      this.showStatus('saveStatus', 'success', this.translate('settingsSaved'));
+      this.showStatus(
+        'saveStatus',
+        permissionResult.warningMessage ? 'warning' : 'success',
+        this.buildStatusMessage('settingsSaved', permissionResult.warningMessage)
+      );
     } catch (error) {
       this.showStatus('saveStatus', 'error', this.translate('saveError') + ': ' + error.message);
     } finally {
@@ -772,9 +1030,9 @@ class OptionsManager {
       return;
     }
 
+    const previousUrl = this.settings.redmineUrl;
     const defaultSettings = {
       redmineUrl: '',
-      apiKey: '',
       checkInterval: 15,
       enableNotifications: true,
       enableSound: true,
@@ -785,8 +1043,19 @@ class OptionsManager {
     };
 
     try {
-      await chrome.storage.sync.set(defaultSettings);
-      this.settings = defaultSettings;
+      await Promise.all([
+        chrome.storage.sync.set(defaultSettings),
+        chrome.storage.local.remove(['apiKey'])
+      ]);
+
+      if (previousUrl) {
+        await this.removeOriginPermission(previousUrl);
+      }
+
+      this.settings = {
+        ...defaultSettings,
+        apiKey: ''
+      };
       this.populateForm();
       this.showStatus('saveStatus', 'success', this.translate('settingsReset'));
     } catch (error) {
@@ -805,18 +1074,43 @@ class OptionsManager {
     }
   }
 
-  showStatus(elementId, type, message) {
-    const element = document.getElementById(elementId);
-    if (element) {
-      element.className = `status-message ${type}`;
-      element.textContent = message;
-      element.style.display = 'block';
-      
-      // Auto-hide after 5 seconds
-      setTimeout(() => {
-        element.style.display = 'none';
-      }, 5000);
+  clearStatusTimer(elementId) {
+    const timeoutId = this.statusHideTimers.get(elementId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      this.statusHideTimers.delete(elementId);
     }
+  }
+
+  setStatusMessage(elementId, type, message, autoHide = true) {
+    const element = document.getElementById(elementId);
+    if (!element) {
+      return;
+    }
+
+    this.clearStatusTimer(elementId);
+    element.className = `status-message ${type}`;
+    element.textContent = message;
+    element.style.display = 'block';
+
+    if (!autoHide) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      element.style.display = 'none';
+      this.statusHideTimers.delete(elementId);
+    }, 5000);
+
+    this.statusHideTimers.set(elementId, timeoutId);
+  }
+
+  showStatus(elementId, type, message) {
+    this.setStatusMessage(elementId, type, message);
+  }
+
+  showPersistentStatus(elementId, type, message) {
+    this.setStatusMessage(elementId, type, message, false);
   }
 
   // Security helper functions
@@ -828,49 +1122,28 @@ class OptionsManager {
   }
 
   sanitizeErrorMessage(message) {
+    const configManagerClass = this.getConfigManagerClass();
+    if (configManagerClass?.redactSensitiveText) {
+      const sanitizedMessage = configManagerClass.redactSensitiveText(message);
+      return sanitizedMessage || 'Unknown error';
+    }
+
     if (typeof message !== 'string') {
       return 'Unknown error';
     }
-    // Remove potentially sensitive information from error messages
+
     return message.replace(/https?:\/\/[^\s]+/g, '[URL]')
-                 .replace(/[a-zA-Z0-9\-_]{20,}/g, '[KEY]')
-                 .substring(0, 200); // Limit length
+      .replace(/[a-zA-Z0-9\-_]{20,}/g, '[KEY]')
+      .substring(0, 200);
   }
 
   isValidRedmineUrl(url) {
-    try {
-      const urlObj = new URL(url);
-      
-      // Only allow http/https protocols
-      if (!['http:', 'https:'].includes(urlObj.protocol)) {
-        return false;
-      }
-      
-      // Prevent malicious redirects or dangerous domains
-      const hostname = urlObj.hostname.toLowerCase();
-      
-      // Block some obviously dangerous patterns
-      if (hostname.includes('javascript') || 
-          hostname.includes('data') ||
-          hostname.includes('file') ||
-          hostname.includes('ftp')) {
-        return false;
-      }
-      
-      // Block private/internal IPs (basic check)
-      if (hostname === 'localhost' || 
-          hostname === '127.0.0.1' ||
-          hostname.startsWith('192.168.') ||
-          hostname.startsWith('10.') ||
-          hostname.startsWith('172.')) {
-        // Allow these but warn the user
-        console.warn('Warning: Using internal/private IP address');
-      }
-      
-      return true;
-    } catch (error) {
-      return false;
+    const configManagerClass = this.getConfigManagerClass();
+    if (!configManagerClass?.validateRedmineUrl) {
+      return this.getValidatedUrlDetails(url).valid;
     }
+
+    return configManagerClass.validateRedmineUrl(url).valid;
   }
 }
 

@@ -11,9 +11,10 @@
     "activeTab",
     "alarms"
   ],
-  "host_permissions": [
+  "optional_host_permissions": [
+    "https://*/*",
     "http://*/*",
-    "https://*/*"
+    "http://[::1]/*"
   ],
   "background": {
     "service_worker": "background.js"
