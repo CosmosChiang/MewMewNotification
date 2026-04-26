@@ -3,6 +3,7 @@ class OptionsManager {
     this.currentLanguage = 'en';
     this.translations = {};
     this.settings = {};
+    this.statusHideTimers = new Map();
     this.init();
   }
 
@@ -16,6 +17,7 @@ class OptionsManager {
     
     this.updateUI();
     this.populateForm();
+    await this.syncConfiguredPermissionStatus();
   }
 
   async loadLanguage(languageOverride) {
@@ -248,6 +250,48 @@ class OptionsManager {
     }
 
     return chrome.permissions.remove(permissionRequest);
+  }
+
+  async syncConfiguredPermissionStatus() {
+    const statusElement = document.getElementById('redmineStatus');
+    if (!statusElement) {
+      return;
+    }
+
+    const missingPermissionMessage = this.translate('hostPermissionRequired');
+    this.clearStatusTimer('redmineStatus');
+
+    if (!this.settings.redmineUrl || !this.settings.apiKey || !chrome.permissions?.contains) {
+      if (statusElement.textContent === missingPermissionMessage) {
+        statusElement.style.display = 'none';
+      }
+      return;
+    }
+
+    const configManagerClass = this.getConfigManagerClass();
+    const validation = configManagerClass?.validateRedmineUrl
+      ? configManagerClass.validateRedmineUrl(this.settings.redmineUrl)
+      : undefined;
+
+    if (!validation?.valid || !validation.originPattern) {
+      if (statusElement.textContent === missingPermissionMessage) {
+        statusElement.style.display = 'none';
+      }
+      return;
+    }
+
+    const hasPermission = await chrome.permissions.contains({
+      origins: [validation.originPattern]
+    });
+
+    if (!hasPermission) {
+      this.showPersistentStatus('redmineStatus', 'info', missingPermissionMessage);
+      return;
+    }
+
+    if (statusElement.textContent === missingPermissionMessage) {
+      statusElement.style.display = 'none';
+    }
   }
 
 
@@ -995,18 +1039,43 @@ class OptionsManager {
     }
   }
 
-  showStatus(elementId, type, message) {
-    const element = document.getElementById(elementId);
-    if (element) {
-      element.className = `status-message ${type}`;
-      element.textContent = message;
-      element.style.display = 'block';
-      
-      // Auto-hide after 5 seconds
-      setTimeout(() => {
-        element.style.display = 'none';
-      }, 5000);
+  clearStatusTimer(elementId) {
+    const timeoutId = this.statusHideTimers.get(elementId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      this.statusHideTimers.delete(elementId);
     }
+  }
+
+  setStatusMessage(elementId, type, message, autoHide = true) {
+    const element = document.getElementById(elementId);
+    if (!element) {
+      return;
+    }
+
+    this.clearStatusTimer(elementId);
+    element.className = `status-message ${type}`;
+    element.textContent = message;
+    element.style.display = 'block';
+
+    if (!autoHide) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      element.style.display = 'none';
+      this.statusHideTimers.delete(elementId);
+    }, 5000);
+
+    this.statusHideTimers.set(elementId, timeoutId);
+  }
+
+  showStatus(elementId, type, message) {
+    this.setStatusMessage(elementId, type, message);
+  }
+
+  showPersistentStatus(elementId, type, message) {
+    this.setStatusMessage(elementId, type, message, false);
   }
 
   // Security helper functions

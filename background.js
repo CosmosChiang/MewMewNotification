@@ -2,6 +2,8 @@ if (typeof importScripts === 'function') {
   importScripts('scripts/shared/config-manager.js');
 }
 
+const HOST_PERMISSION_RECOVERY_NOTIFICATION_ID = 'host-permission-recovery';
+
 class RedmineAPI {
   constructor(baseUrl, apiKey) {
     // Validate inputs
@@ -574,7 +576,11 @@ class NotificationManager {
     return message;
   }
 
-  async loadSettings() {
+  getFallbackTranslation(key, fallbackMessage) {
+    return this.translations[key]?.message || fallbackMessage;
+  }
+
+  async loadSettings({ notifyPermissionRecovery = false } = {}) {
     const configManagerClass = globalThis.ConfigManager;
     if (configManagerClass?.migrateLegacyApiKey) {
       await configManagerClass.migrateLegacyApiKey();
@@ -607,6 +613,8 @@ class NotificationManager {
       onlyMyProjects: syncResult.onlyMyProjects !== false,
       includeWatchedIssues: syncResult.includeWatchedIssues !== false
     };
+
+    await this.syncHostPermissionRecoveryState({ notify: notifyPermissionRecovery });
     
     console.log('Settings loaded:', {
       redmineUrl: this.settings.redmineUrl ? '[CONFIGURED]' : '[NOT_CONFIGURED]',
@@ -637,9 +645,9 @@ class NotificationManager {
     return message;
   }
 
-  async ensureConfiguredHostAccess() {
-    if (!this.settings?.redmineUrl) {
-      return;
+  getConfiguredHostPermissionState() {
+    if (!this.settings?.redmineUrl || !this.settings?.apiKey) {
+      return { configured: false };
     }
 
     const configManagerClass = globalThis.ConfigManager;
@@ -648,16 +656,143 @@ class NotificationManager {
       : { valid: true, originPattern: undefined };
 
     if (!validation.valid) {
-      throw new Error(validation.messageKey || 'invalidUrlFormat');
+      return {
+        configured: true,
+        valid: false,
+        errorMessage: validation.messageKey || 'invalidUrlFormat'
+      };
     }
 
-    if (!chrome.permissions?.contains || !validation.originPattern) {
+    return {
+      configured: true,
+      valid: true,
+      validation,
+      permissionRequest: validation.originPattern
+        ? { origins: [validation.originPattern] }
+        : undefined
+    };
+  }
+
+  async notifyHostPermissionRecovery(normalizedUrl) {
+    if (!chrome.notifications?.create || !chrome.storage?.local) {
       return;
     }
 
-    const hasPermission = await chrome.permissions.contains({
-      origins: [validation.originPattern]
+    const result = await chrome.storage.local.get(['hostPermissionRecoveryNotifiedFor']);
+    if (result.hostPermissionRecoveryNotifiedFor === normalizedUrl) {
+      return;
+    }
+
+    chrome.notifications.create(
+      HOST_PERMISSION_RECOVERY_NOTIFICATION_ID,
+      {
+        type: 'basic',
+        iconUrl: 'icons/icon48.png',
+        title: this.getFallbackTranslation('extName', 'MewMewNotification'),
+        message: this.getFallbackTranslation(
+          'hostPermissionRequired',
+          'Grant host access for the configured Redmine server before syncing'
+        ),
+        contextMessage: normalizedUrl
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          console.error('Failed to create host permission recovery notification:', chrome.runtime.lastError);
+        }
+      }
+    );
+
+    await chrome.storage.local.set({
+      hostPermissionRecoveryNotifiedFor: normalizedUrl
     });
+  }
+
+  async clearHostPermissionRecoveryState() {
+    if (!chrome.storage?.local) {
+      return;
+    }
+
+    const result = await chrome.storage.local.get(['lastErrorCode']);
+
+    await chrome.storage.local.remove([
+      'hostPermissionRecoveryRequired',
+      'hostPermissionRecoveryUrl',
+      'hostPermissionRecoveryOrigin',
+      'hostPermissionRecoveryNotifiedFor'
+    ]);
+
+    if (chrome.notifications?.clear) {
+      chrome.notifications.clear(HOST_PERMISSION_RECOVERY_NOTIFICATION_ID, () => {});
+    }
+
+    if (result.lastErrorCode === 'hostPermissionRequired') {
+      await chrome.storage.local.set({
+        lastError: null,
+        lastErrorCode: null,
+        lastErrorTime: null,
+        shouldRetry: null
+      });
+
+      const unreadCount = Array.from(this.notifications.values()).filter(notification => !notification.read).length;
+      this.updateBadge(unreadCount);
+      chrome.action.setTitle({
+        title: this.getFallbackTranslation('extName', 'MewMewNotification')
+      });
+    }
+  }
+
+  async syncHostPermissionRecoveryState({ notify = false } = {}) {
+    const permissionState = this.getConfiguredHostPermissionState();
+    if (!permissionState.configured || !permissionState.valid || !chrome.permissions?.contains || !permissionState.permissionRequest) {
+      await this.clearHostPermissionRecoveryState();
+      return;
+    }
+
+    const hasPermission = await chrome.permissions.contains(permissionState.permissionRequest);
+    if (hasPermission) {
+      await this.clearHostPermissionRecoveryState();
+      return;
+    }
+
+    const errorMessage = this.getFallbackTranslation(
+      'hostPermissionRequired',
+      'Grant host access for the configured Redmine server before syncing'
+    );
+
+    await chrome.storage.local.set({
+      hostPermissionRecoveryRequired: true,
+      hostPermissionRecoveryUrl: permissionState.validation.normalizedUrl,
+      hostPermissionRecoveryOrigin: permissionState.validation.originPattern,
+      lastError: errorMessage,
+      lastErrorCode: 'hostPermissionRequired',
+      lastErrorTime: Date.now(),
+      shouldRetry: false
+    });
+
+    chrome.action.setBadgeText({ text: '!' });
+    chrome.action.setBadgeBackgroundColor({ color: '#ff4444' });
+    chrome.action.setTitle({ title: `Error: ${errorMessage}` });
+
+    if (notify) {
+      await this.notifyHostPermissionRecovery(permissionState.validation.normalizedUrl);
+    }
+  }
+
+  async ensureConfiguredHostAccess() {
+    const permissionState = this.getConfiguredHostPermissionState();
+    if (!permissionState.configured) {
+      return;
+    }
+
+    if (!permissionState.valid) {
+      throw new Error(permissionState.errorMessage);
+    }
+
+    if (!chrome.permissions?.contains || !permissionState.permissionRequest) {
+      return;
+    }
+
+    const hasPermission = await chrome.permissions.contains(permissionState.permissionRequest);
 
     if (!hasPermission) {
       throw new Error('hostPermissionRequired');
@@ -728,7 +863,7 @@ class NotificationManager {
       console.log('Current issues count:', issues.length);
 
       // Clear error state if successful
-      await chrome.storage.local.set({ lastError: null, lastErrorTime: null });
+      await chrome.storage.local.set({ lastError: null, lastErrorCode: null, lastErrorTime: null });
       
       // Create a copy of readNotifications to avoid modifying the original during iteration
       const readNotificationsCopy = [...this.settings.readNotifications];
@@ -837,6 +972,7 @@ class NotificationManager {
       
       // Handle specific error types
       let errorMessage = this.resolveErrorMessage(error.message);
+      let errorCode = null;
       let shouldRetry = true;
       
       if (error.message.includes('422')) {
@@ -867,11 +1003,14 @@ class NotificationManager {
       } else if (error.message === 'hostPermissionRequired') {
         errorMessage = this.translate('hostPermissionRequired');
         shouldRetry = false;
+        errorCode = 'hostPermissionRequired';
+        await this.syncHostPermissionRecoveryState({ notify: true });
       }
       
       // Store error information for debugging
       await chrome.storage.local.set({ 
         lastError: errorMessage,
+        lastErrorCode: errorCode,
         lastErrorTime: Date.now(),
         shouldRetry: shouldRetry
       });
@@ -1021,7 +1160,7 @@ const ALARM_NAME = 'redmine-notification-check';
 function startPeriodicCheck() {
   stopPeriodicCheck();
   
-  notificationManager.loadSettings().then(() => {
+  notificationManager.loadSettings({ notifyPermissionRecovery: true }).then(() => {
     const intervalMinutes = notificationManager.settings.checkInterval || 15;
     console.log(`Starting periodic check with interval: ${intervalMinutes} minutes`);
     console.log('Current settings:', {
@@ -1193,6 +1332,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Notification click handler
 chrome.notifications.onClicked.addListener((notificationId) => {
+  if (notificationId === HOST_PERMISSION_RECOVERY_NOTIFICATION_ID && chrome.runtime.openOptionsPage) {
+    chrome.runtime.openOptionsPage();
+    return;
+  }
+
   chrome.action.openPopup();
 });
 

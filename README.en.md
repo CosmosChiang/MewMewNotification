@@ -37,6 +37,7 @@ Below are screenshots of the main MewMewNotification interfaces:
    - `http://localhost` and `http://127.0.0.1` are only allowed for local development and show an insecure connection warning.
 4. Set notification check interval, max notification count, language, project filter, etc.
 5. Save settings and click "Test Connection" to verify.
+   - If you upgraded from an older release, save the Redmine settings again once so the extension can request the new per-origin host permission.
 
 ## Notification Management
 
@@ -94,6 +95,7 @@ A: Log in to Redmine, click "My Account" in the top right, and find the API Key 
 ### Q: Why am I not receiving notifications?
 
 A: Check that your Redmine URL and API Key are correct, and that the extension has host access for the configured Redmine origin. You can click "Test Connection" to verify your settings.
+If you upgraded from an older release, open Options and save the Redmine settings again.
 
 ### Q: How do I only see issues assigned to me?
 

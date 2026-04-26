@@ -93,7 +93,7 @@ class ConfigManager {
 
   static getOriginPattern(input) {
     const url = input instanceof URL ? input : new URL(input);
-    return `${url.origin}/*`;
+    return `${url.protocol}//${url.hostname}/*`;
   }
 
   static validateRedmineUrl(url) {

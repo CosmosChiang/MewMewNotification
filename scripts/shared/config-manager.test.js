@@ -207,9 +207,18 @@ describe('ConfigManager', () => {
         expect(ConfigManager.validateRedmineUrl('http://localhost:3000')).toEqual({
           valid: true,
           normalizedUrl: 'http://localhost:3000',
-          originPattern: 'http://localhost:3000/*',
+          originPattern: 'http://localhost/*',
           requiresWarning: true,
           messageKey: 'insecureDevelopmentUrlWarning'
+        });
+      });
+
+      test('should omit ports from host permission origin patterns', () => {
+        expect(ConfigManager.validateRedmineUrl('https://redmine.example.com:8443')).toEqual({
+          valid: true,
+          normalizedUrl: 'https://redmine.example.com:8443',
+          originPattern: 'https://redmine.example.com/*',
+          requiresWarning: false
         });
       });
     });

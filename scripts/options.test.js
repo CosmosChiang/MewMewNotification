@@ -171,7 +171,7 @@ describe('OptionsManager', () => {
       valid: true,
       normalizedUrl: 'http://localhost:3000',
       warningMessage: 'insecureDevelopmentUrlWarning',
-      originPattern: 'http://localhost:3000/*'
+      originPattern: 'http://localhost/*'
     });
   });
 
@@ -233,6 +233,23 @@ describe('OptionsManager', () => {
     });
     expect(elements.redmineStatus.className).toBe('status-message success');
     expect(elements.redmineStatus.textContent).toBe('redmineSettingsSaved');
+  });
+
+  test('requests host permission without including an explicit port', async () => {
+    elements.redmineUrl.value = 'https://redmine.example.com:8443';
+    global.chrome.permissions.contains.mockResolvedValue(false);
+    global.chrome.permissions.request.mockResolvedValue(true);
+    global.chrome.storage.sync.set.mockResolvedValue(undefined);
+    global.chrome.storage.local.set.mockResolvedValue(undefined);
+
+    await manager.saveRedmineSettings();
+
+    expect(global.chrome.permissions.request).toHaveBeenCalledWith({
+      origins: ['https://redmine.example.com/*']
+    });
+    expect(global.chrome.storage.sync.set).toHaveBeenCalledWith({
+      redmineUrl: 'https://redmine.example.com:8443'
+    });
   });
 
   test('removes previously granted host access when Redmine origin changes', async () => {
@@ -306,6 +323,18 @@ describe('OptionsManager', () => {
 
     expect(global.chrome.storage.local.set).toHaveBeenCalledWith({ apiKey: 'legacy-api-key' });
     expect(global.chrome.storage.sync.remove).toHaveBeenCalledWith(['apiKey']);
+  });
+
+  test('shows recovery guidance when configured host access is missing', async () => {
+    manager.settings.redmineUrl = 'https://redmine.example.com';
+    manager.settings.apiKey = 'valid-api-key-123';
+    global.chrome.permissions.contains.mockResolvedValue(false);
+
+    await manager.syncConfiguredPermissionStatus();
+
+    expect(elements.redmineStatus.className).toBe('status-message info');
+    expect(elements.redmineStatus.textContent).toBe('hostPermissionRequired');
+    expect(elements.redmineStatus.style.display).toBe('block');
   });
 
   test('sanitizes user input and redacts secrets from error messages', () => {
