@@ -532,6 +532,7 @@ class NotificationManager {
   constructor() {
     this.notifications = new Map();
     this.settings = null;
+    this.settingsLoadPromise = undefined;
     this.translations = {};
     this.currentLanguage = 'en';
     this.loadSettings();
@@ -581,6 +582,20 @@ class NotificationManager {
   }
 
   async loadSettings({ notifyPermissionRecovery = false } = {}) {
+    if (this.settingsLoadPromise) {
+      return this.settingsLoadPromise;
+    }
+
+    this.settingsLoadPromise = this.loadSettingsInternal({ notifyPermissionRecovery });
+
+    try {
+      return await this.settingsLoadPromise;
+    } finally {
+      this.settingsLoadPromise = undefined;
+    }
+  }
+
+  async loadSettingsInternal({ notifyPermissionRecovery = false } = {}) {
     const configManagerClass = globalThis.ConfigManager;
     if (configManagerClass?.migrateLegacyApiKey) {
       await configManagerClass.migrateLegacyApiKey();
@@ -626,6 +641,15 @@ class NotificationManager {
       onlyMyProjects: this.settings.onlyMyProjects,
       includeWatchedIssues: this.settings.includeWatchedIssues
     });
+  }
+
+  async ensureSettingsLoaded() {
+    if (this.settings) {
+      return this.settings;
+    }
+
+    await this.loadSettings();
+    return this.settings;
   }
 
   resolveErrorMessage(message) {
@@ -800,6 +824,8 @@ class NotificationManager {
   }
 
   async checkNotifications() {
+    await this.ensureSettingsLoaded();
+
     if (!this.settings.redmineUrl || !this.settings.apiKey) {
       console.log('Redmine settings not configured');
       return;
