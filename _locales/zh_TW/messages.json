@@ -343,6 +343,14 @@
     "message": "無效的 URL 格式",
     "description": "URL format validation message"
   },
+  "httpsRequiredForRemoteUrls": {
+    "message": "遠端 Redmine 伺服器必須使用 HTTPS",
+    "description": "Remote HTTP Redmine URLs are not allowed"
+  },
+  "insecureDevelopmentUrlWarning": {
+    "message": "僅允許本機開發環境使用 HTTP，且此連線不安全",
+    "description": "Warning for local development HTTP URLs"
+  },
   "apiKeyRequired": {
     "message": "API 金鑰為必填欄位",
     "description": "API key required validation message"
@@ -398,6 +406,14 @@
   "missingRequiredSettings": {
     "message": "缺少必要的設定",
     "description": "Missing required settings error"
+  },
+  "hostPermissionDenied": {
+    "message": "需要授予主機存取權限，才能連線到這個 Redmine 伺服器",
+    "description": "Permission request denied error message"
+  },
+  "hostPermissionRequired": {
+    "message": "請先授予已設定 Redmine 伺服器的主機存取權限，再執行同步",
+    "description": "Missing host permission error message"
   },
   "connectionTimeout": {
     "message": "連線逾時 - 請檢查您的網路並重試",

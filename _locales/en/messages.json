@@ -343,6 +343,14 @@
     "message": "Invalid URL format",
     "description": "URL format validation message"
   },
+  "httpsRequiredForRemoteUrls": {
+    "message": "Remote Redmine servers must use HTTPS",
+    "description": "Remote HTTP Redmine URLs are not allowed"
+  },
+  "insecureDevelopmentUrlWarning": {
+    "message": "Local development HTTP URLs are allowed, but the connection is insecure",
+    "description": "Warning for local development HTTP URLs"
+  },
   "apiKeyRequired": {
     "message": "API Key is required",
     "description": "API key required validation message"
@@ -410,6 +418,14 @@
   "missingRequiredSettings": {
     "message": "Missing required settings",
     "description": "Missing required settings error"
+  },
+  "hostPermissionDenied": {
+    "message": "Host access permission is required to connect to this Redmine server",
+    "description": "Permission request denied error message"
+  },
+  "hostPermissionRequired": {
+    "message": "Grant host access for the configured Redmine server before syncing",
+    "description": "Missing host permission error message"
   },
   "connectionTimeout": {
     "message": "Connection timeout - please check your network and try again",

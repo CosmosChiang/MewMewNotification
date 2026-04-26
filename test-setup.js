@@ -16,6 +16,11 @@ global.chrome = {
       remove: jest.fn()
     }
   },
+  permissions: {
+    contains: jest.fn(),
+    request: jest.fn(),
+    remove: jest.fn()
+  },
   runtime: {
     sendMessage: jest.fn(),
     onMessage: {
@@ -23,6 +28,12 @@ global.chrome = {
       removeListener: jest.fn()
     },
     getURL: jest.fn((path) => `chrome-extension://test-id/${path}`)
+  },
+  action: {
+    setBadgeText: jest.fn(),
+    setBadgeBackgroundColor: jest.fn(),
+    setTitle: jest.fn(),
+    openPopup: jest.fn()
   },
   notifications: {
     create: jest.fn(),

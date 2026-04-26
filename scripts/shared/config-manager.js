@@ -10,8 +10,9 @@ class ConfigManager {
     const errors = [];
     
     if (settings.redmineUrl) {
-      if (!this.isValidUrl(settings.redmineUrl)) {
-        errors.push('Invalid Redmine URL format');
+      const validation = this.validateRedmineUrl(settings.redmineUrl);
+      if (!validation.valid) {
+        errors.push(validation.messageKey || 'Invalid Redmine URL format');
       }
     }
     
@@ -75,14 +76,142 @@ class ConfigManager {
   }
 
   static isValidUrl(url) {
-    try {
-      const urlObj = new URL(url);
-      // Allow both HTTP and HTTPS protocols
-      // Note: HTTP is not recommended for production due to security concerns
-      return ['http:', 'https:'].includes(urlObj.protocol);
-    } catch {
+    return this.validateRedmineUrl(url).valid;
+  }
+
+  static isDevelopmentHost(hostname) {
+    if (typeof hostname !== 'string') {
       return false;
     }
+
+    const normalizedHost = hostname.toLowerCase();
+    return normalizedHost === 'localhost' ||
+      normalizedHost === '127.0.0.1' ||
+      normalizedHost === '::1' ||
+      normalizedHost === '[::1]';
+  }
+
+  static getOriginPattern(input) {
+    const url = input instanceof URL ? input : new URL(input);
+    return `${url.origin}/*`;
+  }
+
+  static validateRedmineUrl(url) {
+    if (typeof url !== 'string' || url.trim() === '') {
+      return {
+        valid: false,
+        messageKey: 'urlRequired'
+      };
+    }
+
+    try {
+      const urlObj = new URL(url.trim());
+      if (!['http:', 'https:'].includes(urlObj.protocol)) {
+        return {
+          valid: false,
+          messageKey: 'urlMustBeHttpOrHttps'
+        };
+      }
+
+      if (!urlObj.hostname) {
+        return {
+          valid: false,
+          messageKey: 'invalidUrlFormat'
+        };
+      }
+
+      const normalizedUrl = urlObj.toString().replace(/\/$/, '');
+      const originPattern = this.getOriginPattern(urlObj);
+
+      if (urlObj.protocol === 'https:') {
+        return {
+          valid: true,
+          normalizedUrl,
+          originPattern,
+          requiresWarning: false
+        };
+      }
+
+      if (this.isDevelopmentHost(urlObj.hostname)) {
+        return {
+          valid: true,
+          normalizedUrl,
+          originPattern,
+          requiresWarning: true,
+          messageKey: 'insecureDevelopmentUrlWarning'
+        };
+      }
+
+      return {
+        valid: false,
+        messageKey: 'httpsRequiredForRemoteUrls'
+      };
+    } catch {
+      return {
+        valid: false,
+        messageKey: 'invalidUrlFormat'
+      };
+    }
+  }
+
+  static redactSensitiveText(value) {
+    if (typeof value !== 'string') {
+      return '';
+    }
+
+    return value
+      .replace(/https?:\/\/[^\s]+/g, '[URL]')
+      .replace(/[A-Za-z0-9\-_]{20,}/g, '[KEY]')
+      .substring(0, 200);
+  }
+
+  static splitSettingsBySensitivity(settings) {
+    const syncSettings = {};
+    const localSettings = {};
+
+    for (const [key, value] of Object.entries(settings)) {
+      if (key === 'apiKey') {
+        localSettings.apiKey = value;
+        continue;
+      }
+
+      syncSettings[key] = value;
+    }
+
+    return {
+      syncSettings,
+      localSettings
+    };
+  }
+
+  static async migrateLegacyApiKey() {
+    if (!chrome?.storage?.sync || !chrome?.storage?.local) {
+      return '';
+    }
+
+    const [syncResult, localResult] = await Promise.all([
+      chrome.storage.sync.get(['apiKey']),
+      chrome.storage.local.get(['apiKey'])
+    ]);
+
+    const localApiKey = typeof localResult.apiKey === 'string' ? localResult.apiKey : '';
+    const syncApiKey = typeof syncResult.apiKey === 'string' ? syncResult.apiKey : '';
+
+    if (localApiKey) {
+      if (syncApiKey) {
+        await chrome.storage.sync.remove(['apiKey']);
+      }
+
+      return localApiKey;
+    }
+
+    if (!syncApiKey) {
+      return '';
+    }
+
+    await chrome.storage.local.set({ apiKey: syncApiKey });
+    await chrome.storage.sync.remove(['apiKey']);
+    return syncApiKey;
   }
 
   static sanitizeConfig(config) {
@@ -109,7 +238,6 @@ class ConfigManager {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { ConfigManager };
 } else {
-  window.ConfigManager = ConfigManager;
-  // Create global instance
-  window.configManager = new ConfigManager();
+  globalThis.ConfigManager = ConfigManager;
+  globalThis.configManager = new ConfigManager();
 }

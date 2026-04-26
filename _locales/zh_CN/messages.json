@@ -343,6 +343,14 @@
     "message": "无效的 URL 格式",
     "description": "URL format validation message"
   },
+  "httpsRequiredForRemoteUrls": {
+    "message": "远程 Redmine 服务器必须使用 HTTPS",
+    "description": "Remote HTTP Redmine URLs are not allowed"
+  },
+  "insecureDevelopmentUrlWarning": {
+    "message": "仅允许本地开发环境使用 HTTP，且此连接不安全",
+    "description": "Warning for local development HTTP URLs"
+  },
   "apiKeyRequired": {
     "message": "API 密钥为必填字段",
     "description": "API key required validation message"
@@ -398,6 +406,14 @@
   "missingRequiredSettings": {
     "message": "缺少必要的设置",
     "description": "Missing required settings error"
+  },
+  "hostPermissionDenied": {
+    "message": "需要授予主机访问权限，才能连接到这个 Redmine 服务器",
+    "description": "Permission request denied error message"
+  },
+  "hostPermissionRequired": {
+    "message": "请先授予已配置 Redmine 服务器的主机访问权限，再执行同步",
+    "description": "Missing host permission error message"
   },
   "connectionTimeout": {
     "message": "连接超时 - 请检查您的网络并重试",

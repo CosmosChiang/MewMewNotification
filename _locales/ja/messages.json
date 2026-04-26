@@ -343,6 +343,14 @@
     "message": "無効な URL 形式です",
     "description": "URL format validation message"
   },
+  "httpsRequiredForRemoteUrls": {
+    "message": "リモートの Redmine サーバーは HTTPS を使用する必要があります",
+    "description": "Remote HTTP Redmine URLs are not allowed"
+  },
+  "insecureDevelopmentUrlWarning": {
+    "message": "ローカル開発用の HTTP URL は許可されますが、この接続は安全ではありません",
+    "description": "Warning for local development HTTP URLs"
+  },
   "apiKeyRequired": {
     "message": "API キーは必須です",
     "description": "API key required validation message"
@@ -398,6 +406,14 @@
   "missingRequiredSettings": {
     "message": "必要な設定が不足しています",
     "description": "Missing required settings error"
+  },
+  "hostPermissionDenied": {
+    "message": "この Redmine サーバーへ接続するにはホスト権限の許可が必要です",
+    "description": "Permission request denied error message"
+  },
+  "hostPermissionRequired": {
+    "message": "同期する前に、設定済み Redmine サーバーへのホスト権限を許可してください",
+    "description": "Missing host permission error message"
   },
   "connectionTimeout": {
     "message": "接続タイムアウト - ネットワークを確認して再試行してください",

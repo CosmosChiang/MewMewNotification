@@ -1,8 +1,11 @@
+if (typeof importScripts === 'function') {
+  importScripts('scripts/shared/config-manager.js');
+}
+
 class RedmineAPI {
   constructor(baseUrl, apiKey) {
     // Validate inputs
-    this.validateBaseUrl(baseUrl);
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.baseUrl = this.validateBaseUrl(baseUrl);
     this.apiKey = this.sanitizeApiKey(apiKey);
     this.currentUser = null;
     this.requestQueue = [];
@@ -446,23 +449,16 @@ class RedmineAPI {
   }
 
   validateBaseUrl(url) {
-    try {
-      const urlObj = new URL(url);
-      
-      // Only allow HTTP/HTTPS
-      if (!['http:', 'https:'].includes(urlObj.protocol)) {
-        throw new Error('Invalid protocol. Only HTTP/HTTPS allowed.');
-      }
-      
-      // Basic hostname validation
-      if (!urlObj.hostname || urlObj.hostname.length < 1) {
-        throw new Error('Invalid hostname');
-      }
-      
-      return true;
-    } catch (error) {
-      throw new Error('Invalid base URL: ' + error.message);
+    const configManagerClass = globalThis.ConfigManager;
+    const validation = configManagerClass?.validateRedmineUrl
+      ? configManagerClass.validateRedmineUrl(url)
+      : { valid: false, messageKey: 'invalidUrlFormat' };
+
+    if (!validation.valid) {
+      throw new Error(validation.messageKey || 'invalidUrlFormat');
     }
+
+    return validation.normalizedUrl;
   }
 
   // Helper method to validate API parameters
@@ -579,9 +575,14 @@ class NotificationManager {
   }
 
   async loadSettings() {
-    const result = await chrome.storage.sync.get([
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.migrateLegacyApiKey) {
+      await configManagerClass.migrateLegacyApiKey();
+    }
+
+    const [syncResult, localResult] = await Promise.all([
+      chrome.storage.sync.get([
       'redmineUrl',
-      'apiKey',
       'checkInterval',
       'enableNotifications',
       'enableSound',
@@ -589,21 +590,22 @@ class NotificationManager {
       'readNotifications',
       'onlyMyProjects',
       'includeWatchedIssues'
+      ]),
+      chrome.storage.local.get(['apiKey'])
     ]);
 
-    // Use API key directly
-    const apiKey = result.apiKey || '';
+    const apiKey = localResult.apiKey || '';
 
     this.settings = {
-      redmineUrl: result.redmineUrl || '',
+      redmineUrl: syncResult.redmineUrl || '',
       apiKey: apiKey,
-      checkInterval: result.checkInterval || 15,
-      enableNotifications: result.enableNotifications !== false,
-      enableSound: result.enableSound !== false,
-      maxNotifications: result.maxNotifications || 50,
-      readNotifications: result.readNotifications || [],
-      onlyMyProjects: result.onlyMyProjects !== false, // Default to true (only my projects)
-      includeWatchedIssues: result.includeWatchedIssues !== false // Default to true
+      checkInterval: syncResult.checkInterval || 15,
+      enableNotifications: syncResult.enableNotifications !== false,
+      enableSound: syncResult.enableSound !== false,
+      maxNotifications: syncResult.maxNotifications || 50,
+      readNotifications: syncResult.readNotifications || [],
+      onlyMyProjects: syncResult.onlyMyProjects !== false,
+      includeWatchedIssues: syncResult.includeWatchedIssues !== false
     };
     
     console.log('Settings loaded:', {
@@ -616,6 +618,50 @@ class NotificationManager {
       onlyMyProjects: this.settings.onlyMyProjects,
       includeWatchedIssues: this.settings.includeWatchedIssues
     });
+  }
+
+  resolveErrorMessage(message) {
+    const translated = this.translate(message);
+    if (translated !== message) {
+      return translated;
+    }
+
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.redactSensitiveText) {
+      const sanitizedMessage = configManagerClass.redactSensitiveText(message);
+      if (sanitizedMessage) {
+        return sanitizedMessage;
+      }
+    }
+
+    return message;
+  }
+
+  async ensureConfiguredHostAccess() {
+    if (!this.settings?.redmineUrl) {
+      return;
+    }
+
+    const configManagerClass = globalThis.ConfigManager;
+    const validation = configManagerClass?.validateRedmineUrl
+      ? configManagerClass.validateRedmineUrl(this.settings.redmineUrl)
+      : { valid: true, originPattern: undefined };
+
+    if (!validation.valid) {
+      throw new Error(validation.messageKey || 'invalidUrlFormat');
+    }
+
+    if (!chrome.permissions?.contains || !validation.originPattern) {
+      return;
+    }
+
+    const hasPermission = await chrome.permissions.contains({
+      origins: [validation.originPattern]
+    });
+
+    if (!hasPermission) {
+      throw new Error('hostPermissionRequired');
+    }
   }
 
   async checkNotifications() {
@@ -633,6 +679,7 @@ class NotificationManager {
     try {
       // Performance monitoring
       const startTime = performance.now();
+      await this.ensureConfiguredHostAccess();
       
       const api = new RedmineAPI(this.settings.redmineUrl, this.settings.apiKey);
       
@@ -789,7 +836,7 @@ class NotificationManager {
       console.error('Failed to check notifications:', error);
       
       // Handle specific error types
-      let errorMessage = error.message;
+      let errorMessage = this.resolveErrorMessage(error.message);
       let shouldRetry = true;
       
       if (error.message.includes('422')) {
@@ -817,6 +864,9 @@ class NotificationManager {
         
       } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
         errorMessage = 'Network error - check your internet connection';
+      } else if (error.message === 'hostPermissionRequired') {
+        errorMessage = this.translate('hostPermissionRequired');
+        shouldRetry = false;
       }
       
       // Store error information for debugging
@@ -1034,7 +1084,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     console.log('Storage changes detected:', Object.keys(changes));
     
     // Reload settings if any setting changed
-    if (Object.keys(changes).some(key => ['redmineUrl', 'apiKey', 'checkInterval', 'enableNotifications', 'enableSound', 'maxNotifications', 'onlyMyProjects', 'includeWatchedIssues'].includes(key))) {
+    if (Object.keys(changes).some(key => ['redmineUrl', 'checkInterval', 'enableNotifications', 'enableSound', 'maxNotifications', 'onlyMyProjects', 'includeWatchedIssues', 'readNotifications'].includes(key))) {
       console.log('Settings changed, reloading...');
       notificationManager.loadSettings().then(() => {
         // Restart periodic check if check interval changed
@@ -1050,6 +1100,11 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
       console.log('Language changed, reloading translations...');
       notificationManager.loadLanguage();
     }
+  }
+
+  if (namespace === 'local' && changes.apiKey) {
+    console.log('Local credential change detected, reloading settings...');
+    notificationManager.loadSettings();
   }
 });
 
@@ -1118,9 +1173,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // Add a debug endpoint to check current settings
       notificationManager.loadSettings().then(() => {
         chrome.alarms.get(ALARM_NAME, (alarm) => {
+          const safeSettings = {
+            ...notificationManager.settings,
+            apiKey: notificationManager.settings.apiKey ? '[CONFIGURED]' : '[NOT_CONFIGURED]'
+          };
           sendResponse({ 
             success: true, 
-            settings: notificationManager.settings,
+            settings: safeSettings,
             alarmActive: !!alarm,
             alarmInfo: alarm || null
           });

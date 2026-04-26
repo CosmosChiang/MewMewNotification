@@ -1,10 +1,19 @@
 // Unit tests for ConfigManager class
 // Import the actual ConfigManager to test real implementation
 
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
 // Mock chrome APIs before importing the module
 global.chrome = {
   storage: {
     sync: {
+      get: jest.fn(),
+      set: jest.fn(),
+      remove: jest.fn()
+    },
+    local: {
       get: jest.fn(),
       set: jest.fn(),
       remove: jest.fn()
@@ -45,9 +54,10 @@ describe('ConfigManager', () => {
         expect(ConfigManager.isValidUrl('https://test.com/redmine')).toBe(true);
       });
 
-      test('should return true for valid HTTP URLs', () => {
-        expect(ConfigManager.isValidUrl('http://redmine.example.com')).toBe(true);
+      test('should only return true for local development HTTP URLs', () => {
+        expect(ConfigManager.isValidUrl('http://redmine.example.com')).toBe(false);
         expect(ConfigManager.isValidUrl('http://localhost:3000')).toBe(true);
+        expect(ConfigManager.isValidUrl('http://127.0.0.1:3000')).toBe(true);
       });
 
       test('should return false for invalid URLs', () => {
@@ -57,6 +67,13 @@ describe('ConfigManager', () => {
         expect(ConfigManager.isValidUrl('')).toBe(false);
         expect(ConfigManager.isValidUrl(null)).toBe(false);
         expect(ConfigManager.isValidUrl(undefined)).toBe(false);
+      });
+
+      test('should recognize supported development hosts only', () => {
+        expect(ConfigManager.isDevelopmentHost('localhost')).toBe(true);
+        expect(ConfigManager.isDevelopmentHost('127.0.0.1')).toBe(true);
+        expect(ConfigManager.isDevelopmentHost('[::1]')).toBe(true);
+        expect(ConfigManager.isDevelopmentHost(undefined)).toBe(false);
       });
     });
 
@@ -80,7 +97,7 @@ describe('ConfigManager', () => {
 
         const result = await ConfigManager.validateSettings(settings);
         expect(result.valid).toBe(false);
-        expect(result.errors).toContain('Invalid Redmine URL format');
+        expect(result.errors).toContain('invalidUrlFormat');
       });
 
       test('should return errors for invalid check interval', async () => {
@@ -118,7 +135,7 @@ describe('ConfigManager', () => {
         const result = await ConfigManager.validateSettings(settings);
         expect(result.valid).toBe(false);
         expect(result.errors).toHaveLength(2);
-        expect(result.errors).toContain('Invalid Redmine URL format');
+        expect(result.errors).toContain('invalidUrlFormat');
         expect(result.errors).toContain('Max notifications must be between 1 and 1000');
       });
 
@@ -175,6 +192,57 @@ describe('ConfigManager', () => {
         const sanitized = ConfigManager.sanitizeConfig(config);
         expect(Object.keys(sanitized)).toHaveLength(9);
         expect(sanitized).toEqual(config);
+      });
+    });
+
+    describe('validateRedmineUrl', () => {
+      test('should reject insecure remote HTTP URLs', () => {
+        expect(ConfigManager.validateRedmineUrl('http://redmine.example.com')).toEqual({
+          valid: false,
+          messageKey: 'httpsRequiredForRemoteUrls'
+        });
+      });
+
+      test('should allow development HTTP URLs with warning metadata', () => {
+        expect(ConfigManager.validateRedmineUrl('http://localhost:3000')).toEqual({
+          valid: true,
+          normalizedUrl: 'http://localhost:3000',
+          originPattern: 'http://localhost:3000/*',
+          requiresWarning: true,
+          messageKey: 'insecureDevelopmentUrlWarning'
+        });
+      });
+    });
+
+    describe('splitSettingsBySensitivity', () => {
+      test('should keep API key in local settings only', () => {
+        const result = ConfigManager.splitSettingsBySensitivity({
+          redmineUrl: 'https://redmine.example.com',
+          apiKey: 'super-secret-key',
+          language: 'en'
+        });
+
+        expect(result.syncSettings).toEqual({
+          redmineUrl: 'https://redmine.example.com',
+          language: 'en'
+        });
+        expect(result.localSettings).toEqual({
+          apiKey: 'super-secret-key'
+        });
+      });
+    });
+
+    describe('redactSensitiveText', () => {
+      test('should redact URLs and token-like values', () => {
+        expect(
+          ConfigManager.redactSensitiveText(
+            'Request to https://redmine.example.com failed for token abcdefghijklmnopqrstuvwxyz'
+          )
+        ).toBe('Request to [URL] failed for token [KEY]');
+      });
+
+      test('should return empty string for non-string values', () => {
+        expect(ConfigManager.redactSensitiveText(undefined)).toBe('');
       });
     });
   });
@@ -309,6 +377,71 @@ describe('ConfigManager', () => {
 
         await expect(configManager.setCachedSettings(settings)).rejects.toThrow('Storage set error');
       });
+    });
+
+    describe('migrateLegacyApiKey', () => {
+      test('should move API key from sync storage to local storage', async () => {
+        chrome.storage.sync.get.mockResolvedValue({ apiKey: 'legacy-api-key' });
+        chrome.storage.local.get.mockResolvedValue({});
+        chrome.storage.local.set.mockResolvedValue(undefined);
+        chrome.storage.sync.remove.mockResolvedValue(undefined);
+
+        const result = await ConfigManager.migrateLegacyApiKey();
+
+        expect(result).toBe('legacy-api-key');
+        expect(chrome.storage.local.set).toHaveBeenCalledWith({ apiKey: 'legacy-api-key' });
+        expect(chrome.storage.sync.remove).toHaveBeenCalledWith(['apiKey']);
+      });
+
+      test('should keep local API key and remove stale sync copy', async () => {
+        chrome.storage.sync.get.mockResolvedValue({ apiKey: 'legacy-api-key' });
+        chrome.storage.local.get.mockResolvedValue({ apiKey: 'local-api-key' });
+        chrome.storage.sync.remove.mockResolvedValue(undefined);
+
+        const result = await ConfigManager.migrateLegacyApiKey();
+
+        expect(result).toBe('local-api-key');
+        expect(chrome.storage.local.set).not.toHaveBeenCalled();
+        expect(chrome.storage.sync.remove).toHaveBeenCalledWith(['apiKey']);
+      });
+
+      test('should return empty string when no API key exists in either storage area', async () => {
+        chrome.storage.sync.get.mockResolvedValue({});
+        chrome.storage.local.get.mockResolvedValue({});
+
+        const result = await ConfigManager.migrateLegacyApiKey();
+
+        expect(result).toBe('');
+        expect(chrome.storage.local.set).not.toHaveBeenCalled();
+        expect(chrome.storage.sync.remove).not.toHaveBeenCalled();
+      });
+
+      test('should return empty string when chrome storage is unavailable', async () => {
+        const originalChrome = global.chrome;
+        global.chrome = undefined;
+
+        await expect(ConfigManager.migrateLegacyApiKey()).resolves.toBe('');
+
+        global.chrome = originalChrome;
+      });
+    });
+  });
+
+  describe('Browser export path', () => {
+    test('should attach ConfigManager to globalThis when module exports are unavailable', () => {
+      const filePath = path.join(__dirname, 'config-manager.js');
+      const source = fs.readFileSync(filePath, 'utf8');
+      const sandbox = {
+        chrome: global.chrome,
+        globalThis: {}
+      };
+
+      vm.runInNewContext(source, sandbox, {
+        filename: filePath
+      });
+
+      expect(typeof sandbox.globalThis.ConfigManager).toBe('function');
+      expect(sandbox.globalThis.configManager).toBeInstanceOf(sandbox.globalThis.ConfigManager);
     });
   });
 });
