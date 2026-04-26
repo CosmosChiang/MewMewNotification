@@ -175,7 +175,7 @@ describe('NotificationManager host permission recovery', () => {
     const chromeMock = createChromeMock();
     const { NotificationManager } = loadBackgroundModule(chromeMock);
     const manager = new NotificationManager();
-    manager.settings = null;
+    manager.settingsLoaded = false;
     manager.loadSettings = jest.fn().mockImplementation(async () => {
       manager.settings = {
         redmineUrl: '',
@@ -193,5 +193,28 @@ describe('NotificationManager host permission recovery', () => {
 
     await expect(manager.checkNotifications()).resolves.toBeUndefined();
     expect(manager.loadSettings).toHaveBeenCalled();
+  });
+
+  test('normalizes null storage results to default settings', async () => {
+    const chromeMock = createChromeMock();
+    chromeMock.storage.sync.get.mockResolvedValue(null);
+    chromeMock.storage.local.get.mockResolvedValue(null);
+
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+
+    await expect(manager.loadSettings()).resolves.toBeUndefined();
+    expect(manager.settings).toEqual(expect.objectContaining({
+      redmineUrl: '',
+      apiKey: '',
+      checkInterval: 15,
+      enableNotifications: true,
+      enableSound: true,
+      maxNotifications: 50,
+      readNotifications: [],
+      onlyMyProjects: true,
+      includeWatchedIssues: true
+    }));
+    await expect(manager.checkNotifications()).resolves.toBeUndefined();
   });
 });

@@ -25,7 +25,11 @@ class PopupManager {
         this.currentLanguage = languageOverride;
       } else {
         const result = await chrome.storage.sync.get(['language']);
-        this.currentLanguage = result.language || 'en';
+        const configManagerClass = globalThis.ConfigManager;
+        const languageSettings = configManagerClass?.normalizeStorageResult
+          ? configManagerClass.normalizeStorageResult(result)
+          : (result && typeof result === 'object' ? result : {});
+        this.currentLanguage = languageSettings.language || 'en';
       }
       
       const response = await fetch(`_locales/${this.currentLanguage}/messages.json`);

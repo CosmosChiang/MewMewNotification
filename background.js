@@ -531,19 +531,37 @@ class RedmineAPI {
 class NotificationManager {
   constructor() {
     this.notifications = new Map();
-    this.settings = null;
+    this.settings = this.getDefaultSettings();
+    this.settingsLoaded = false;
     this.settingsLoadPromise = undefined;
     this.translations = {};
     this.currentLanguage = 'en';
-    this.loadSettings();
+    this.loadSettings().catch(error => {
+      console.error('Failed to preload settings:', error);
+    });
     this.loadLanguage();
+  }
+
+  getDefaultSettings() {
+    return {
+      redmineUrl: '',
+      apiKey: '',
+      checkInterval: 15,
+      enableNotifications: true,
+      enableSound: true,
+      maxNotifications: 50,
+      readNotifications: [],
+      onlyMyProjects: true,
+      includeWatchedIssues: true
+    };
   }
 
   async loadLanguage() {
     try {
       // Get language preference from settings
       const result = await chrome.storage.sync.get(['language']);
-      this.currentLanguage = result.language || 'en';
+      const languageSettings = this.normalizeStorageResult(result);
+      this.currentLanguage = languageSettings.language || 'en';
       
       // Load translations
       const response = await fetch(`_locales/${this.currentLanguage}/messages.json`);
@@ -581,6 +599,13 @@ class NotificationManager {
     return this.translations[key]?.message || fallbackMessage;
   }
 
+  normalizeStorageResult(result) {
+    const configManagerClass = globalThis.ConfigManager;
+    return configManagerClass?.normalizeStorageResult
+      ? configManagerClass.normalizeStorageResult(result)
+      : (result && typeof result === 'object' ? result : {});
+  }
+
   async loadSettings({ notifyPermissionRecovery = false } = {}) {
     if (this.settingsLoadPromise) {
       return this.settingsLoadPromise;
@@ -615,19 +640,33 @@ class NotificationManager {
       chrome.storage.local.get(['apiKey'])
     ]);
 
-    const apiKey = localResult.apiKey || '';
+    const syncSettings = this.normalizeStorageResult(syncResult);
+    const localSettings = this.normalizeStorageResult(localResult);
+    const defaultSettings = this.getDefaultSettings();
 
     this.settings = {
-      redmineUrl: syncResult.redmineUrl || '',
-      apiKey: apiKey,
-      checkInterval: syncResult.checkInterval || 15,
-      enableNotifications: syncResult.enableNotifications !== false,
-      enableSound: syncResult.enableSound !== false,
-      maxNotifications: syncResult.maxNotifications || 50,
-      readNotifications: syncResult.readNotifications || [],
-      onlyMyProjects: syncResult.onlyMyProjects !== false,
-      includeWatchedIssues: syncResult.includeWatchedIssues !== false
+      ...defaultSettings,
+      redmineUrl: typeof syncSettings.redmineUrl === 'string'
+        ? syncSettings.redmineUrl
+        : defaultSettings.redmineUrl,
+      apiKey: typeof localSettings.apiKey === 'string'
+        ? localSettings.apiKey
+        : defaultSettings.apiKey,
+      checkInterval: Number.isFinite(syncSettings.checkInterval) && syncSettings.checkInterval > 0
+        ? syncSettings.checkInterval
+        : defaultSettings.checkInterval,
+      enableNotifications: syncSettings.enableNotifications !== false,
+      enableSound: syncSettings.enableSound !== false,
+      maxNotifications: Number.isFinite(syncSettings.maxNotifications) && syncSettings.maxNotifications > 0
+        ? syncSettings.maxNotifications
+        : defaultSettings.maxNotifications,
+      readNotifications: Array.isArray(syncSettings.readNotifications)
+        ? syncSettings.readNotifications
+        : defaultSettings.readNotifications,
+      onlyMyProjects: syncSettings.onlyMyProjects !== false,
+      includeWatchedIssues: syncSettings.includeWatchedIssues !== false
     };
+    this.settingsLoaded = true;
 
     await this.syncHostPermissionRecoveryState({ notify: notifyPermissionRecovery });
     
@@ -644,7 +683,7 @@ class NotificationManager {
   }
 
   async ensureSettingsLoaded() {
-    if (this.settings) {
+    if (this.settingsLoaded) {
       return this.settings;
     }
 
@@ -702,7 +741,9 @@ class NotificationManager {
       return;
     }
 
-    const result = await chrome.storage.local.get(['hostPermissionRecoveryNotifiedFor']);
+    const result = this.normalizeStorageResult(
+      await chrome.storage.local.get(['hostPermissionRecoveryNotifiedFor'])
+    );
     if (result.hostPermissionRecoveryNotifiedFor === normalizedUrl) {
       return;
     }
@@ -736,7 +777,9 @@ class NotificationManager {
       return;
     }
 
-    const result = await chrome.storage.local.get(['lastErrorCode']);
+    const result = this.normalizeStorageResult(
+      await chrome.storage.local.get(['lastErrorCode'])
+    );
 
     await chrome.storage.local.remove([
       'hostPermissionRecoveryRequired',
@@ -882,7 +925,9 @@ class NotificationManager {
       const updatedNotifications = [];
 
       // Get previous issue states for comparison
-      const result = await chrome.storage.local.get(['issueStates']);
+      const result = this.normalizeStorageResult(
+        await chrome.storage.local.get(['issueStates'])
+      );
       const previousIssueStates = result.issueStates || {};
 
       console.log('Previous issue states count:', Object.keys(previousIssueStates).length);
@@ -1051,7 +1096,9 @@ class NotificationManager {
   }
 
   async hasSeenNotification(notificationId) {
-    const result = await chrome.storage.local.get(['seenNotifications']);
+    const result = this.normalizeStorageResult(
+      await chrome.storage.local.get(['seenNotifications'])
+    );
     const seenNotifications = result.seenNotifications || [];
     return seenNotifications.includes(notificationId);
   }
@@ -1112,7 +1159,9 @@ class NotificationManager {
     if (notification) {
       notification.read = true;
       
-      const result = await chrome.storage.sync.get(['readNotifications']);
+      const result = this.normalizeStorageResult(
+        await chrome.storage.sync.get(['readNotifications'])
+      );
       const readNotifications = result.readNotifications || [];
       
       if (!readNotifications.includes(notificationId)) {
@@ -1128,7 +1177,9 @@ class NotificationManager {
 
   async markAllAsRead() {
     const unreadNotifications = Array.from(this.notifications.values()).filter(n => !n.read);
-    const result = await chrome.storage.sync.get(['readNotifications']);
+    const result = this.normalizeStorageResult(
+      await chrome.storage.sync.get(['readNotifications'])
+    );
     const readNotifications = result.readNotifications || [];
 
     for (const notification of unreadNotifications) {

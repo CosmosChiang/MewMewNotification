@@ -187,8 +187,10 @@ class ConfigManager {
       chrome.storage.local.get(['apiKey'])
     ]);
 
-    const localApiKey = typeof localResult.apiKey === 'string' ? localResult.apiKey : '';
-    const syncApiKey = typeof syncResult.apiKey === 'string' ? syncResult.apiKey : '';
+    const syncSettings = this.normalizeStorageResult(syncResult);
+    const localSettings = this.normalizeStorageResult(localResult);
+    const localApiKey = typeof localSettings.apiKey === 'string' ? localSettings.apiKey : '';
+    const syncApiKey = typeof syncSettings.apiKey === 'string' ? syncSettings.apiKey : '';
 
     if (localApiKey) {
       if (syncApiKey) {
@@ -205,6 +207,10 @@ class ConfigManager {
     await chrome.storage.local.set({ apiKey: syncApiKey });
     await chrome.storage.sync.remove(['apiKey']);
     return syncApiKey;
+  }
+
+  static normalizeStorageResult(result) {
+    return result && typeof result === 'object' ? result : {};
   }
 
   static sanitizeConfig(config) {

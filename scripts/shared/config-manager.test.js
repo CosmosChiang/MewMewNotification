@@ -446,6 +446,13 @@ describe('ConfigManager', () => {
 
         global.chrome = originalChrome;
       });
+
+      test('should tolerate null storage payloads', async () => {
+        chrome.storage.sync.get.mockResolvedValue(null);
+        chrome.storage.local.get.mockResolvedValue(null);
+
+        await expect(ConfigManager.migrateLegacyApiKey()).resolves.toBe('');
+      });
     });
   });
 

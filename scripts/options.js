@@ -26,7 +26,11 @@ class OptionsManager {
         this.currentLanguage = languageOverride;
       } else {
         const result = await chrome.storage.sync.get(['language']);
-        this.currentLanguage = result.language || 'en';
+        const configManagerClass = this.getConfigManagerClass();
+        const languageSettings = configManagerClass?.normalizeStorageResult
+          ? configManagerClass.normalizeStorageResult(result)
+          : (result && typeof result === 'object' ? result : {});
+        this.currentLanguage = languageSettings.language || 'en';
       }
       
       const response = await fetch(`_locales/${this.currentLanguage}/messages.json`);
@@ -66,18 +70,24 @@ class OptionsManager {
       chrome.storage.local.get(['apiKey'])
     ]);
 
-    const apiKey = localResult.apiKey || '';
+    const syncSettings = configManagerClass?.normalizeStorageResult
+      ? configManagerClass.normalizeStorageResult(syncResult)
+      : (syncResult && typeof syncResult === 'object' ? syncResult : {});
+    const localSettings = configManagerClass?.normalizeStorageResult
+      ? configManagerClass.normalizeStorageResult(localResult)
+      : (localResult && typeof localResult === 'object' ? localResult : {});
+    const apiKey = typeof localSettings.apiKey === 'string' ? localSettings.apiKey : '';
 
     this.settings = {
-      redmineUrl: syncResult.redmineUrl || '',
+      redmineUrl: syncSettings.redmineUrl || '',
       apiKey: apiKey,
-      checkInterval: syncResult.checkInterval || 15,
-      enableNotifications: syncResult.enableNotifications !== false,
-      enableSound: syncResult.enableSound !== false,
-      maxNotifications: syncResult.maxNotifications || 50,
-      language: syncResult.language || 'en',
-      onlyMyProjects: syncResult.onlyMyProjects !== false,
-      includeWatchedIssues: syncResult.includeWatchedIssues === true
+      checkInterval: syncSettings.checkInterval || 15,
+      enableNotifications: syncSettings.enableNotifications !== false,
+      enableSound: syncSettings.enableSound !== false,
+      maxNotifications: syncSettings.maxNotifications || 50,
+      language: syncSettings.language || 'en',
+      onlyMyProjects: syncSettings.onlyMyProjects !== false,
+      includeWatchedIssues: syncSettings.includeWatchedIssues === true
     };
   }
 
