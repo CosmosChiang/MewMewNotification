@@ -176,7 +176,21 @@ class RedmineAPI {
         throw new Error(`HTTP ${response.status}: ${response.statusText}${errorDetails}`);
       }
 
-      const result = await response.json();
+      if (response.status === 204) {
+        return {};
+      }
+
+      const responseText = await response.text();
+      if (!responseText) {
+        return {};
+      }
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        throw new Error('Invalid response format');
+      }
       
       // Basic response validation
       if (typeof result !== 'object' || result === null) {
@@ -401,6 +415,221 @@ class RedmineAPI {
     };
   }
 
+  parsePositiveInteger(value, fieldName = 'identifier') {
+    const parsedValue = Number.parseInt(value, 10);
+    if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
+      throw new Error(`Invalid ${fieldName}`);
+    }
+    return parsedValue;
+  }
+
+  sanitizeIssueNotes(notes) {
+    if (typeof notes !== 'string') {
+      throw new Error('Reply content is required');
+    }
+
+    const trimmedNotes = notes.trim();
+    if (!trimmedNotes) {
+      throw new Error('Reply content is required');
+    }
+
+    if (trimmedNotes.length > 5000) {
+      throw new Error('Reply content is too long');
+    }
+
+    return trimmedNotes;
+  }
+
+  buildIssueEndpoint(issueId, queryParams) {
+    const safeIssueId = this.parsePositiveInteger(issueId, 'issue id');
+    const queryString = queryParams instanceof URLSearchParams
+      ? queryParams.toString()
+      : new URLSearchParams(queryParams || {}).toString();
+
+    return `/issues/${safeIssueId}.json${queryString ? `?${queryString}` : ''}`;
+  }
+
+  isPermissionError(error) {
+    return typeof error?.message === 'string' && /403|forbidden/i.test(error.message);
+  }
+
+  isNotFoundError(error) {
+    return typeof error?.message === 'string' && /404|not found/i.test(error.message);
+  }
+
+  normalizeStatusOptions(statuses) {
+    if (!Array.isArray(statuses)) {
+      return [];
+    }
+
+    return statuses
+      .filter(status => Number.isInteger(status?.id) && typeof status?.name === 'string' && status.name.trim())
+      .map(status => ({
+        id: status.id,
+        name: status.name.trim()
+      }));
+  }
+
+  normalizeAssigneeOptions(memberships, issue) {
+    const assigneeMap = new Map();
+
+    if (Array.isArray(memberships)) {
+      memberships.forEach(membership => {
+        const user = membership?.user;
+        if (Number.isInteger(user?.id) && typeof user?.name === 'string' && user.name.trim()) {
+          assigneeMap.set(user.id, {
+            id: user.id,
+            name: user.name.trim()
+          });
+        }
+      });
+    }
+
+    const currentAssignee = issue?.assigned_to;
+    if (
+      Number.isInteger(currentAssignee?.id)
+      && typeof currentAssignee?.name === 'string'
+      && currentAssignee.name.trim()
+      && !assigneeMap.has(currentAssignee.id)
+    ) {
+      assigneeMap.set(currentAssignee.id, {
+        id: currentAssignee.id,
+        name: currentAssignee.name.trim()
+      });
+    }
+
+    return Array.from(assigneeMap.values()).sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async getIssueDetails(issueId) {
+    const queryParams = new URLSearchParams({
+      include: 'allowed_statuses'
+    });
+
+    return this.request(this.buildIssueEndpoint(issueId, queryParams));
+  }
+
+  async getProjectMemberships(projectId) {
+    const safeProjectId = this.parsePositiveInteger(projectId, 'project id');
+    const queryParams = new URLSearchParams({
+      limit: '100'
+    });
+
+    return this.request(`/projects/${safeProjectId}/memberships.json?${queryParams.toString()}`);
+  }
+
+  async getIssueStatuses() {
+    return this.request('/issue_statuses.json');
+  }
+
+  async getIssueActionContext(issueId) {
+    const issueResponse = await this.getIssueDetails(issueId);
+    const issue = issueResponse.issue;
+
+    if (!issue || !Number.isInteger(issue.id)) {
+      throw new Error('Resource not found - please check your Redmine URL');
+    }
+
+    let statusOptions = this.normalizeStatusOptions(issue.allowed_statuses);
+    if (statusOptions.length === 0) {
+      const statusResponse = await this.getIssueStatuses();
+      statusOptions = this.normalizeStatusOptions(statusResponse.issue_statuses);
+    }
+
+    let assigneeOptions = [];
+    if (Number.isInteger(issue.project?.id)) {
+      try {
+        const membershipsResponse = await this.getProjectMemberships(issue.project.id);
+        assigneeOptions = this.normalizeAssigneeOptions(membershipsResponse.memberships, issue);
+      } catch (error) {
+        if (!this.isPermissionError(error) && !this.isNotFoundError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    return {
+      issue,
+      permissions: {
+        canReply: true,
+        canChangeStatus: statusOptions.length > 0,
+        canChangeAssignee: assigneeOptions.length > 0
+      },
+      current: {
+        statusId: Number.isInteger(issue.status?.id) ? issue.status.id : undefined,
+        assigneeId: Number.isInteger(issue.assigned_to?.id) ? issue.assigned_to.id : undefined
+      },
+      statusOptions,
+      assigneeOptions
+    };
+  }
+
+  async updateIssue(issueId, issueData) {
+    const sanitizedIssueData = Object.fromEntries(
+      Object.entries(issueData).filter(([, value]) => value !== undefined)
+    );
+
+    if (Object.keys(sanitizedIssueData).length === 0) {
+      throw new Error('No issue changes provided');
+    }
+
+    return this.request(this.buildIssueEndpoint(issueId), {
+      method: 'PUT',
+      body: JSON.stringify({
+        issue: sanitizedIssueData
+      })
+    });
+  }
+
+  async submitIssueReply(issueId, reply) {
+    const sanitizedReply = this.sanitizeIssueNotes(reply);
+    return this.updateIssue(issueId, {
+      notes: sanitizedReply
+    });
+  }
+
+  async updateIssueStatus(issueId, statusId) {
+    return this.updateIssue(issueId, {
+      status_id: this.parsePositiveInteger(statusId, 'status id')
+    });
+  }
+
+  async updateIssueAssignee(issueId, assigneeId) {
+    return this.updateIssue(issueId, {
+      assigned_to_id: this.parsePositiveInteger(assigneeId, 'assignee id')
+    });
+  }
+
+  buildIssueUpdateData(changes = {}) {
+    if (!changes || typeof changes !== 'object') {
+      throw new Error('No issue changes provided');
+    }
+
+    const issueData = {};
+
+    if (typeof changes.reply === 'string' && changes.reply.trim()) {
+      issueData.notes = this.sanitizeIssueNotes(changes.reply);
+    }
+
+    if (changes.statusId !== undefined && changes.statusId !== null && changes.statusId !== '') {
+      issueData.status_id = this.parsePositiveInteger(changes.statusId, 'status id');
+    }
+
+    if (changes.assigneeId !== undefined && changes.assigneeId !== null && changes.assigneeId !== '') {
+      issueData.assigned_to_id = this.parsePositiveInteger(changes.assigneeId, 'assignee id');
+    }
+
+    if (Object.keys(issueData).length === 0) {
+      throw new Error('No issue changes provided');
+    }
+
+    return issueData;
+  }
+
+  async applyIssueChanges(issueId, changes) {
+    return this.updateIssue(issueId, this.buildIssueUpdateData(changes));
+  }
+
   async testConnection() {
     try {
       await this.getCurrentUser(); // This will also test the connection and load user info
@@ -419,19 +648,24 @@ class RedmineAPI {
 
   // Security validation for API requests
   validateApiEndpoint(endpoint) {
-    // Only allow specific Redmine API endpoints
-    const allowedEndpoints = [
-      '/issues.json',
-      '/users/current.json',
-      '/projects.json',
-      '/time_entries.json',
-      '/news.json',
-      '/versions.json'
+    const normalizedEndpoint = typeof endpoint === 'string'
+      ? endpoint.split('?')[0]
+      : '';
+    const allowedEndpointPatterns = [
+      /^\/issues\.json$/,
+      /^\/issues\/\d+\.json$/,
+      /^\/users\/current\.json$/,
+      /^\/projects\.json$/,
+      /^\/projects\/\d+\/memberships\.json$/,
+      /^\/time_entries\.json$/,
+      /^\/news\.json$/,
+      /^\/versions\.json$/,
+      /^\/issue_statuses\.json$/
     ];
     
     // Check if the endpoint starts with an allowed pattern
-    const isAllowed = allowedEndpoints.some(allowed => 
-      endpoint.startsWith(allowed) || endpoint === allowed
+    const isAllowed = allowedEndpointPatterns.some(allowedPattern =>
+      allowedPattern.test(normalizedEndpoint)
     );
     
     if (!isAllowed) {
@@ -866,6 +1100,160 @@ class NotificationManager {
     }
   }
 
+  async createApiClient() {
+    await this.ensureSettingsLoaded();
+
+    if (!this.settings.redmineUrl || !this.settings.apiKey) {
+      throw new Error('missingRequiredSettings');
+    }
+
+    await this.ensureConfiguredHostAccess();
+    return new RedmineAPI(this.settings.redmineUrl, this.settings.apiKey);
+  }
+
+  buildNotificationFromIssue(issue, existingNotification = {}) {
+    return {
+      id: `issue_${issue.id}`,
+      issueId: issue.id,
+      title: `#${issue.id}: ${issue.subject}`,
+      project: issue.project?.name || this.translate('unknownProject'),
+      author: issue.author?.name || this.translate('unknownAuthor'),
+      status: issue.status?.name || this.translate('unknownStatus'),
+      priority: issue.priority?.name || this.translate('normalPriority'),
+      assigneeId: issue.assigned_to?.id,
+      assigneeName: issue.assigned_to?.name || '',
+      projectId: issue.project?.id,
+      updatedOn: new Date(issue.updated_on),
+      url: `${this.settings.redmineUrl}/issues/${issue.id}`,
+      read: existingNotification.read === true,
+      isUpdated: existingNotification.isUpdated === true,
+      sourceType: issue.sourceType || existingNotification.sourceType || 'unknown'
+    };
+  }
+
+  async persistIssueState(issue) {
+    const result = this.normalizeStorageResult(
+      await chrome.storage.local.get(['issueStates'])
+    );
+    const issueStates = result.issueStates || {};
+
+    issueStates[issue.id] = {
+      updatedOn: new Date(issue.updated_on).getTime(),
+      status: issue.status?.name,
+      subject: issue.subject
+    };
+
+    await chrome.storage.local.set({ issueStates });
+  }
+
+  async syncUpdatedIssue(issue) {
+    const notificationId = `issue_${issue.id}`;
+    const existingNotification = this.notifications.get(notificationId) || {};
+    const syncedNotification = this.buildNotificationFromIssue(issue, {
+      ...existingNotification,
+      isUpdated: false
+    });
+
+    this.notifications.set(notificationId, syncedNotification);
+    await this.persistIssueState(issue);
+
+    const unreadCount = Array.from(this.notifications.values())
+      .filter(notification => !notification.read)
+      .length;
+    this.updateBadge(unreadCount);
+
+    return syncedNotification;
+  }
+
+  formatIssueActionContext(context) {
+    return {
+      permissions: context.permissions,
+      current: context.current,
+      statusOptions: context.statusOptions,
+      assigneeOptions: context.assigneeOptions
+    };
+  }
+
+  resolveIssueActionError(error) {
+    if (typeof error?.message === 'string') {
+      if (/403|forbidden/i.test(error.message)) {
+        return this.translate('permissionDenied');
+      }
+
+      if (/Reply content is required/i.test(error.message)) {
+        return this.translate('replyRequired');
+      }
+
+      if (/Reply content is too long/i.test(error.message)) {
+        return this.translate('replyTooLong');
+      }
+
+      if (/Invalid (issue|status|assignee) id/i.test(error.message)) {
+        return this.translate('issueActionValidationError');
+      }
+
+      if (/No issue changes provided/i.test(error.message)) {
+        return this.translate('noChangesToSubmit');
+      }
+    }
+
+    return this.resolveErrorMessage(error.message || String(error));
+  }
+
+  async getIssueActionContext(issueId) {
+    try {
+      const api = await this.createApiClient();
+      const context = await api.getIssueActionContext(issueId);
+
+      return {
+        success: true,
+        context: this.formatIssueActionContext(context)
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: this.resolveIssueActionError(error)
+      };
+    }
+  }
+
+  async executeIssueAction(issueId, actionCallback) {
+    try {
+      const api = await this.createApiClient();
+      await actionCallback(api);
+
+      const context = await api.getIssueActionContext(issueId);
+      const notification = await this.syncUpdatedIssue(context.issue);
+
+      return {
+        success: true,
+        notification,
+        context: this.formatIssueActionContext(context)
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: this.resolveIssueActionError(error)
+      };
+    }
+  }
+
+  async submitIssueReply(issueId, reply) {
+    return this.executeIssueAction(issueId, api => api.submitIssueReply(issueId, reply));
+  }
+
+  async updateIssueStatus(issueId, statusId) {
+    return this.executeIssueAction(issueId, api => api.updateIssueStatus(issueId, statusId));
+  }
+
+  async updateIssueAssignee(issueId, assigneeId) {
+    return this.executeIssueAction(issueId, api => api.updateIssueAssignee(issueId, assigneeId));
+  }
+
+  async applyIssueChanges(issueId, changes) {
+    return this.executeIssueAction(issueId, api => api.applyIssueChanges(issueId, changes));
+  }
+
   async checkNotifications() {
     await this.ensureSettingsLoaded();
 
@@ -946,20 +1334,11 @@ class NotificationManager {
         const currentUpdateTime = new Date(issue.updated_on).getTime();
         const previousState = previousIssueStates[issue.id];
         
-        const notification = {
-          id: notificationId,
-          issueId: issue.id,
-          title: `#${issue.id}: ${issue.subject}`,
-          project: issue.project?.name || this.translate('unknownProject'),
-          author: issue.author?.name || this.translate('unknownAuthor'),
-          status: issue.status?.name || this.translate('unknownStatus'),
-          priority: issue.priority?.name || this.translate('normalPriority'),
-          updatedOn: new Date(issue.updated_on),
-          url: `${this.settings.redmineUrl}/issues/${issue.id}`,
+        const notification = this.buildNotificationFromIssue(issue, {
           read: isRead,
           isUpdated: false,
           sourceType: issue.sourceType || 'unknown'
-        };
+        });
 
         // Check if this is a new issue or an updated issue
         if (!previousState) {
@@ -1326,26 +1705,39 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 
 // Message handlers
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  const handleAsyncResponse = (task, errorMapper = error => error.message) => {
+    (async () => {
+      try {
+        const result = await task();
+        sendResponse(result);
+      } catch (error) {
+        console.error(`Message handler failed for action: ${request.action}`, error);
+        sendResponse({
+          success: false,
+          error: errorMapper(error)
+        });
+      }
+    })();
+
+    return true;
+  };
+
   switch (request.action) {
     case 'getNotifications':
       sendResponse({ notifications: notificationManager.getNotifications() });
       break;
       
     case 'markAsRead':
-      notificationManager.markAsRead(request.notificationId).then(() => {
-        sendResponse({ success: true });
-      }).catch(error => {
-        sendResponse({ success: false, error: error.message });
+      return handleAsyncResponse(async () => {
+        await notificationManager.markAsRead(request.notificationId);
+        return { success: true };
       });
-      return true; // Keep the message channel open for async response
       
     case 'markAllAsRead':
-      notificationManager.markAllAsRead().then(() => {
-        sendResponse({ success: true });
-      }).catch(error => {
-        sendResponse({ success: false, error: error.message });
+      return handleAsyncResponse(async () => {
+        await notificationManager.markAllAsRead();
+        return { success: true };
       });
-      return true;
       
     case 'testConnection':
       if (!request.redmineUrl || !request.apiKey) {
@@ -1354,56 +1746,85 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
       
       const api = new RedmineAPI(request.redmineUrl, request.apiKey);
-      api.testConnection().then(result => {
-        sendResponse(result);
-      }).catch(error => {
-        sendResponse({ success: false, error: error.message });
-      });
-      return true;
+      return handleAsyncResponse(() => api.testConnection());
       
     case 'refreshNotifications':
-      notificationManager.checkNotifications().then(() => {
-        sendResponse({ success: true, notifications: notificationManager.getNotifications() });
-      }).catch(error => {
-        sendResponse({ success: false, error: error.message });
+      return handleAsyncResponse(async () => {
+        await notificationManager.checkNotifications();
+        return { success: true, notifications: notificationManager.getNotifications() };
       });
-      return true;
       
     case 'forceRefreshNotifications':
-      notificationManager.forceRefreshNotifications().then(() => {
-        sendResponse({ success: true, notifications: notificationManager.getNotifications() });
-      }).catch(error => {
-        sendResponse({ success: false, error: error.message });
+      return handleAsyncResponse(async () => {
+        await notificationManager.forceRefreshNotifications();
+        return { success: true, notifications: notificationManager.getNotifications() };
       });
-      return true;
       
     case 'clearAllNotifications':
-      notificationManager.clearAllNotifications().then(() => {
-        sendResponse({ success: true });
-      }).catch(error => {
-        sendResponse({ success: false, error: error.message });
+      return handleAsyncResponse(async () => {
+        await notificationManager.clearAllNotifications();
+        return { success: true };
       });
-      return true;
+
+    case 'getIssueActionContext':
+      return handleAsyncResponse(
+        () => notificationManager.getIssueActionContext(request.issueId),
+        error => notificationManager.resolveIssueActionError(error)
+      );
+
+    case 'submitIssueReply':
+      return handleAsyncResponse(
+        () => notificationManager.submitIssueReply(request.issueId, request.reply),
+        error => notificationManager.resolveIssueActionError(error)
+      );
+
+    case 'updateIssueStatus':
+      return handleAsyncResponse(
+        () => notificationManager.updateIssueStatus(request.issueId, request.statusId),
+        error => notificationManager.resolveIssueActionError(error)
+      );
+
+    case 'updateIssueAssignee':
+      return handleAsyncResponse(
+        () => notificationManager.updateIssueAssignee(request.issueId, request.assigneeId),
+        error => notificationManager.resolveIssueActionError(error)
+      );
+
+    case 'applyIssueChanges':
+      return handleAsyncResponse(
+        () => notificationManager.applyIssueChanges(request.issueId, request.changes),
+        error => notificationManager.resolveIssueActionError(error)
+      );
       
     case 'getSettings':
       // Add a debug endpoint to check current settings
-      notificationManager.loadSettings().then(() => {
-        chrome.alarms.get(ALARM_NAME, (alarm) => {
-          const safeSettings = {
-            ...notificationManager.settings,
-            apiKey: notificationManager.settings.apiKey ? '[CONFIGURED]' : '[NOT_CONFIGURED]'
-          };
-          sendResponse({ 
-            success: true, 
-            settings: safeSettings,
-            alarmActive: !!alarm,
-            alarmInfo: alarm || null
+      return handleAsyncResponse(async () => {
+        await notificationManager.loadSettings();
+        const alarm = await new Promise(resolve => {
+          chrome.alarms.get(ALARM_NAME, currentAlarm => {
+            resolve(currentAlarm);
           });
         });
-      }).catch(error => {
-        sendResponse({ success: false, error: error.message });
+
+        const safeSettings = {
+          ...notificationManager.settings,
+          apiKey: notificationManager.settings.apiKey ? '[CONFIGURED]' : '[NOT_CONFIGURED]'
+        };
+
+        return { 
+          success: true, 
+          settings: safeSettings,
+          alarmActive: !!alarm,
+          alarmInfo: alarm || null
+        };
       });
-      return true;
+
+    default:
+      sendResponse({
+        success: false,
+        error: `Unknown action: ${request.action}`
+      });
+      return false;
   }
 });
 

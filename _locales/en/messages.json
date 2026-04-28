@@ -31,6 +31,26 @@
     "message": "Mark as read",
     "description": "Mark as read button tooltip"
   },
+  "moreActions": {
+    "message": "More actions",
+    "description": "Expand advanced actions button tooltip"
+  },
+  "hideActions": {
+    "message": "Hide actions",
+    "description": "Collapse advanced actions button tooltip"
+  },
+  "loadingActions": {
+    "message": "Loading available actions...",
+    "description": "Loading message for advanced issue actions"
+  },
+  "actionsUnavailable": {
+    "message": "Advanced actions are currently unavailable.",
+    "description": "Fallback message when advanced issue actions cannot be loaded"
+  },
+  "backgroundNoResponse": {
+    "message": "The background service did not respond. Reload the extension and try again.",
+    "description": "Error shown when the popup does not receive a response from the background service"
+  },
   "settings": {
     "message": "Settings",
     "description": "Settings button tooltip"
@@ -98,6 +118,106 @@
   "updated": {
     "message": "Updated",
     "description": "Label shown for items that have been updated"
+  },
+  "quickReply": {
+    "message": "Quick reply",
+    "description": "Section title for issue quick reply"
+  },
+  "replyLabel": {
+    "message": "Reply",
+    "description": "Label for issue reply textarea"
+  },
+  "replyPlaceholder": {
+    "message": "Write a comment with Markdown support...",
+    "description": "Placeholder for issue reply textarea"
+  },
+  "markdownPreview": {
+    "message": "Markdown preview",
+    "description": "Label for the Markdown preview area"
+  },
+  "noPreview": {
+    "message": "Start typing to see a preview.",
+    "description": "Empty state for the Markdown preview area"
+  },
+  "submitReply": {
+    "message": "Submit reply",
+    "description": "Button label for submitting an issue reply"
+  },
+  "replySuccess": {
+    "message": "Reply posted successfully.",
+    "description": "Success message after posting an issue reply"
+  },
+  "replyRequired": {
+    "message": "Reply content is required.",
+    "description": "Validation message when issue reply content is empty"
+  },
+  "replyTooLong": {
+    "message": "Reply content is too long.",
+    "description": "Validation message when issue reply content is too long"
+  },
+  "changeStatus": {
+    "message": "Change status",
+    "description": "Section title for issue status updates"
+  },
+  "statusLabel": {
+    "message": "Status",
+    "description": "Label for the issue status select field"
+  },
+  "updateStatus": {
+    "message": "Update status",
+    "description": "Button label for issue status updates"
+  },
+  "statusUpdateSuccess": {
+    "message": "Status updated successfully.",
+    "description": "Success message after updating issue status"
+  },
+  "changeAssignee": {
+    "message": "Change assignee",
+    "description": "Section title for issue assignee updates"
+  },
+  "assigneeLabel": {
+    "message": "Assignee",
+    "description": "Label for the issue assignee select field"
+  },
+  "selectAssignee": {
+    "message": "Select an assignee",
+    "description": "Placeholder option for the assignee select field"
+  },
+  "updateAssignee": {
+    "message": "Update assignee",
+    "description": "Button label for issue assignee updates"
+  },
+  "assigneeUpdateSuccess": {
+    "message": "Assignee updated successfully.",
+    "description": "Success message after updating issue assignee"
+  },
+  "assigneeMeta": {
+    "message": "Assignee: $1",
+    "description": "Meta label for the current assignee on a notification card"
+  },
+  "permissionDenied": {
+    "message": "You do not have permission to perform this action.",
+    "description": "Permission denied message for advanced issue actions"
+  },
+  "issueActionValidationError": {
+    "message": "The issue action request is invalid.",
+    "description": "Validation error message for advanced issue actions"
+  },
+  "submitChanges": {
+    "message": "Submit changes",
+    "description": "Button label for submitting all pending issue changes"
+  },
+  "submitChangesHint": {
+    "message": "Only filled or changed fields will be submitted. Empty fields are skipped automatically.",
+    "description": "Hint shown above the combined issue changes submit button"
+  },
+  "noChangesToSubmit": {
+    "message": "There are no changes to submit.",
+    "description": "Message shown when the user tries to submit without any pending changes"
+  },
+  "issueChangesSuccess": {
+    "message": "Changes submitted successfully.",
+    "description": "Success message after submitting combined issue changes"
   },
   "testConnection": {
     "message": "Test Connection",
@@ -192,7 +312,7 @@
     "description": "Application name in about section"
   },
   "version": {
-    "message": "Version: 1.0.1",
+    "message": "Version: 1.2.0",
     "description": "Version information"
   },
   "appDescription": {

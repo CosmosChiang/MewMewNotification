@@ -23,6 +23,7 @@ Below are screenshots of the main MewMewNotification interfaces:
 - One-click mark all notifications as read or clear all notifications
 - Multi-language interface (Traditional Chinese, Simplified Chinese, Japanese, English; easily extensible)
 - Direct links to Redmine issue pages for quick tracking
+- Expandable **More actions** panel for quick reply, status changes, and assignee updates
 - Project filter: show only issues assigned to you, or include watched issues
 - Auto-detect issue updates with intelligent notification management
 - Badge counter for unread notification count
@@ -44,6 +45,15 @@ Below are screenshots of the main MewMewNotification interfaces:
   - **Mark all as read**: Marks all notifications as read, keeps history for later review.
   - **Clear all notifications**: Deletes all notifications, clears the list, cannot be undone.
   - Both actions are one-click and update status instantly.
+- Each issue card now includes a **More actions** button:
+  - **Quick reply**: Post a Redmine note directly from the popup with lightweight
+    Markdown preview.
+  - **Change status**: Pick an available Redmine status and apply it without opening
+    the full issue page.
+  - **Change assignee**: Reassign the issue from the popup when assignable users are
+    available.
+  - Action availability follows Redmine permissions; if your role cannot perform an
+    action, the popup shows a permission warning instead of silently failing.
 - Manual refresh supported
 - Retry on notification failure and error prompts
 
@@ -103,6 +113,12 @@ A: Enable "Show only issues assigned to me" in the Notifications tab of the sett
 ### Q: How do I include issues I'm watching?
 
 A: Enable "Include issues I'm watching" in the Notifications tab of the settings page.
+
+### Q: Why are some advanced issue actions disabled?
+
+A: The popup follows the permissions returned by your Redmine server. If your role
+cannot update status, change assignee, or add notes for an issue, the corresponding
+control will stay disabled and show a permission warning.
 
 ### Q: How do I add a new language?
 

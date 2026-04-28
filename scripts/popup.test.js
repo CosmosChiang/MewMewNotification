@@ -141,13 +141,16 @@ describe('PopupManager', () => {
 
     await manager.loadNotifications();
 
-    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith({
-      action: 'refreshNotifications'
-    });
+    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      { action: 'refreshNotifications' },
+      expect.any(Function)
+    );
     expect(manager.notifications).toEqual([
-      { id: 1, read: false },
-      { id: 3, read: false }
+      expect.objectContaining({ id: 1, read: false }),
+      expect.objectContaining({ id: 3, read: false })
     ]);
+    expect(manager.notifications[0].updatedOn).toBeInstanceOf(Date);
+    expect(manager.notifications[1].updatedOn).toBeInstanceOf(Date);
     expect(manager.throttledRender).toHaveBeenCalled();
     expect(elements.loadingIndicator.style.display).toBe('flex');
   });
@@ -171,10 +174,13 @@ describe('PopupManager', () => {
 
     await manager.markAsRead(1);
 
-    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith({
-      action: 'markAsRead',
-      notificationId: 1
-    });
+    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      {
+        action: 'markAsRead',
+        notificationId: 1
+      },
+      expect.any(Function)
+    );
     expect(manager.notifications).toEqual([{ id: 2, read: false }]);
     expect(manager.renderNotifications).toHaveBeenCalled();
   });
@@ -188,9 +194,12 @@ describe('PopupManager', () => {
 
     await manager.refreshNotifications();
 
-    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith({
-      action: 'forceRefreshNotifications'
-    });
+    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      {
+        action: 'forceRefreshNotifications'
+      },
+      expect.any(Function)
+    );
     expect(manager.loadNotifications).toHaveBeenCalled();
     expect(elements.refreshBtn.disabled).toBe(true);
   });
@@ -206,5 +215,204 @@ describe('PopupManager', () => {
     expect(consoleSpy).toHaveBeenCalled();
 
     consoleSpy.mockRestore();
+  });
+
+  test('loads issue action context when expanding advanced actions', async () => {
+    manager.renderNotifications = jest.fn();
+    manager.notifications = [
+      { id: 'issue_1', issueId: 1, read: false }
+    ];
+    global.chrome.runtime.sendMessage.mockResolvedValue({
+      success: true,
+      context: {
+        permissions: {
+          canReply: true,
+          canChangeStatus: true,
+          canChangeAssignee: false
+        },
+        current: {
+          statusId: 2,
+          assigneeId: 5
+        },
+        statusOptions: [
+          { id: 2, name: 'In Progress' }
+        ],
+        assigneeOptions: []
+      }
+    });
+
+    await manager.toggleAdvancedActions('issue_1');
+
+    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      {
+        action: 'getIssueActionContext',
+        issueId: 1
+      },
+      expect.any(Function)
+    );
+    expect(manager.expandedNotificationId).toBe('issue_1');
+    expect(manager.getIssueActionState('issue_1')).toEqual(expect.objectContaining({
+      context: expect.objectContaining({
+        current: expect.objectContaining({ statusId: 2 })
+      }),
+      statusId: '2',
+      assigneeId: '5'
+    }));
+  });
+
+  test('submits only changed fields with the combined submit action', async () => {
+    manager.renderNotifications = jest.fn();
+    manager.notifications = [
+      {
+        id: 'issue_7',
+        issueId: 7,
+        read: false,
+        status: 'Open',
+        updatedOn: new Date('2026-04-27T10:00:00.000Z')
+      }
+    ];
+    const actionState = manager.getIssueActionState('issue_7');
+    actionState.replyText = 'Need **review**';
+    actionState.context = {
+      permissions: {
+        canReply: true,
+        canChangeStatus: true,
+        canChangeAssignee: true
+      },
+      current: {
+        statusId: 2,
+        assigneeId: 9
+      },
+      statusOptions: [
+        { id: 2, name: 'Open' },
+        { id: 3, name: 'Resolved' }
+      ],
+      assigneeOptions: [
+        { id: 9, name: 'Alice' }
+      ]
+    };
+    actionState.statusId = '3';
+    actionState.assigneeId = '9';
+    global.chrome.runtime.sendMessage.mockResolvedValue({
+      success: true,
+      notification: {
+        id: 'issue_7',
+        issueId: 7,
+        read: false,
+        status: 'Resolved',
+        updatedOn: '2026-04-28T08:00:00.000Z'
+      },
+      context: {
+        permissions: {
+          canReply: true,
+          canChangeStatus: true,
+          canChangeAssignee: true
+        },
+        current: {
+          statusId: 3,
+          assigneeId: 9
+        },
+        statusOptions: [
+          { id: 3, name: 'Resolved' }
+        ],
+        assigneeOptions: [
+          { id: 9, name: 'Alice' }
+        ]
+      }
+    });
+
+    await manager.submitIssueChanges('issue_7');
+
+    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      {
+        action: 'applyIssueChanges',
+        issueId: 7,
+        changes: {
+          reply: 'Need **review**',
+          statusId: 3
+        }
+      },
+      expect.any(Function)
+    );
+    expect(manager.notifications[0]).toEqual(expect.objectContaining({
+      id: 'issue_7',
+      status: 'Resolved'
+    }));
+    expect(manager.notifications[0].updatedOn).toBeInstanceOf(Date);
+    expect(actionState.replyText).toBe('');
+    expect(actionState.success).toBe('issueChangesSuccess');
+    expect(actionState.statusId).toBe('3');
+  });
+
+  test('builds pending changes from only filled or modified fields', () => {
+    const state = manager.getIssueActionState('issue_3');
+    state.replyText = '  ';
+    state.statusId = '2';
+    state.assigneeId = '12';
+    state.context = {
+      permissions: {
+        canReply: true,
+        canChangeStatus: true,
+        canChangeAssignee: true
+      },
+      current: {
+        statusId: 2,
+        assigneeId: 9
+      }
+    };
+
+    expect(manager.getPendingIssueChanges(state)).toEqual({
+      assigneeId: 12
+    });
+  });
+
+  test('shows a validation message when no combined changes are pending', async () => {
+    manager.renderNotifications = jest.fn();
+    manager.notifications = [
+      { id: 'issue_5', issueId: 5, read: false }
+    ];
+    const state = manager.getIssueActionState('issue_5');
+    state.context = {
+      permissions: {
+        canReply: true,
+        canChangeStatus: true,
+        canChangeAssignee: true
+      },
+      current: {
+        statusId: 2,
+        assigneeId: 9
+      }
+    };
+    state.statusId = '2';
+    state.assigneeId = '9';
+
+    await manager.submitIssueChanges('issue_5');
+
+    expect(state.error).toBe('noChangesToSubmit');
+  });
+
+  test('renders lightweight Markdown preview content', () => {
+    manager.escapeHtml = jest.fn((value) => value);
+
+    const rendered = manager.renderMarkdown('**Bold**\n- Item');
+
+    expect(rendered).toContain('<strong>Bold</strong>');
+    expect(rendered).toContain('<ul>');
+    expect(rendered).toContain('<li>Item</li>');
+  });
+
+  test('surfaces a background no-response error for advanced actions', async () => {
+    manager.renderNotifications = jest.fn();
+    manager.notifications = [
+      { id: 'issue_9', issueId: 9, read: false }
+    ];
+    global.chrome.runtime.sendMessage.mockImplementation((_message, callback) => {
+      callback(undefined);
+      return undefined;
+    });
+
+    await manager.toggleAdvancedActions('issue_9');
+
+    expect(manager.getIssueActionState('issue_9').error).toBe('backgroundNoResponse');
   });
 });
