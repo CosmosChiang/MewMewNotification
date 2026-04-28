@@ -5,10 +5,12 @@ class PopupManager {
     this.notifications = [];
     this.renderQueue = [];
     this.isRendering = false;
+    this.expandedNotificationId = undefined;
+    this.issueActionStates = new Map();
     this.virtualScrollConfig = {
-      itemHeight: 80, // Approximate height of each notification item
-      bufferSize: 5,  // Number of items to render outside visible area
-      visibleItems: 10 // Number of items visible at once
+      itemHeight: 80,
+      bufferSize: 5,
+      visibleItems: 10
     };
     this.init();
   }
@@ -42,7 +44,6 @@ class PopupManager {
       return this.translations;
     } catch (error) {
       console.error('Failed to load language:', error);
-      // Fallback to English if loading fails
       if (this.currentLanguage !== 'en') {
         return this.loadLanguage('en');
       }
@@ -67,12 +68,11 @@ class PopupManager {
   }
 
   updateUI() {
-    // Update all translatable elements
     const elements = {
-      'headerTitle': 'popupTitle',
-      'loadingText': 'loadingText',
-      'emptyText': 'noNotifications',
-      'errorText': 'loadError'
+      headerTitle: 'popupTitle',
+      loadingText: 'loadingText',
+      emptyText: 'noNotifications',
+      errorText: 'loadError'
     };
 
     Object.entries(elements).forEach(([elementId, translationKey]) => {
@@ -82,7 +82,6 @@ class PopupManager {
       }
     });
 
-    // Update button titles
     const markAllBtn = document.getElementById('markAllReadBtn');
     if (markAllBtn) {
       markAllBtn.title = this.translate('markAllRead');
@@ -109,8 +108,62 @@ class PopupManager {
     }
   }
 
+  async sendRuntimeMessage(message) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+
+      const resolveOnce = (response) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+
+        if (response === undefined) {
+          reject(new Error('backgroundNoResponse'));
+          return;
+        }
+
+        resolve(response);
+      };
+
+      const rejectOnce = (error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        reject(error);
+      };
+
+      try {
+        const maybePromise = chrome.runtime.sendMessage(message, response => {
+          if (chrome.runtime?.lastError) {
+            rejectOnce(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+
+          resolveOnce(response);
+        });
+
+        if (maybePromise && typeof maybePromise.then === 'function') {
+          maybePromise.then(resolveOnce).catch(rejectOnce);
+        }
+      } catch (error) {
+        rejectOnce(error);
+      }
+    });
+  }
+
+  resolveRuntimeError(error, fallbackKey = 'actionsUnavailable') {
+    const errorMessage = error?.message || String(error);
+
+    if (errorMessage === 'backgroundNoResponse') {
+      return this.translate('backgroundNoResponse');
+    }
+
+    return errorMessage || this.translate(fallbackKey);
+  }
+
   getNotificationTemplate() {
-    // Cache template for better performance
     if (!this._notificationTemplate) {
       this._notificationTemplate = document.createElement('div');
       this._notificationTemplate.innerHTML = `
@@ -119,48 +172,42 @@ class PopupManager {
           <div class="notification-meta"></div>
         </div>
         <div class="notification-actions"></div>
+        <div class="advanced-actions-panel" hidden></div>
       `;
     }
     return this._notificationTemplate;
   }
 
-  // Throttled render function for better performance
   throttledRender() {
     if (this.renderTimeout) {
       clearTimeout(this.renderTimeout);
     }
     this.renderTimeout = setTimeout(() => {
       this.renderNotifications();
-    }, 16); // ~60fps
+    }, 16);
   }
 
   setupEventListeners() {
-    // Settings button
     document.getElementById('settingsBtn').addEventListener('click', () => {
       chrome.runtime.openOptionsPage();
     });
 
-    // Mark all as read button
     document.getElementById('markAllReadBtn').addEventListener('click', () => {
       this.markAllAsRead();
     });
 
-    // Refresh button
     document.getElementById('refreshBtn').addEventListener('click', () => {
       this.refreshNotifications();
     });
 
-    // Clear all button
     document.getElementById('clearAllBtn').addEventListener('click', () => {
       this.clearAllNotifications();
     });
 
-    // Retry button
     document.getElementById('retryBtn').addEventListener('click', () => {
       this.loadNotifications();
     });
 
-    // Listen for storage changes
     chrome.storage.onChanged.addListener((changes, namespace) => {
       if (namespace === 'sync' && changes.language) {
         this.loadLanguage();
@@ -172,18 +219,41 @@ class PopupManager {
     this.showLoading();
     
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'refreshNotifications' });
+      const response = await this.sendRuntimeMessage({ action: 'refreshNotifications' });
       
       if (response.success) {
-        // Show all unread notifications (including updated ones)
-        this.notifications = response.notifications.filter(notification => !notification.read);
+        this.notifications = response.notifications
+          .filter(notification => !notification.read)
+          .map(notification => this.normalizeNotification(notification));
+        this.pruneIssueActionState();
         this.throttledRender();
       } else {
         this.showError(response.error);
       }
     } catch (error) {
       console.error('Failed to load notifications:', error);
-      this.showError(error.message);
+      this.showError(this.resolveRuntimeError(error, 'loadError'));
+    }
+  }
+
+  normalizeNotification(notification) {
+    return {
+      ...notification,
+      updatedOn: notification.updatedOn ? new Date(notification.updatedOn) : new Date()
+    };
+  }
+
+  pruneIssueActionState() {
+    const activeNotificationIds = new Set(this.notifications.map(notification => notification.id));
+
+    Array.from(this.issueActionStates.keys()).forEach(notificationId => {
+      if (!activeNotificationIds.has(notificationId)) {
+        this.issueActionStates.delete(notificationId);
+      }
+    });
+
+    if (this.expandedNotificationId && !activeNotificationIds.has(this.expandedNotificationId)) {
+      this.expandedNotificationId = undefined;
     }
   }
 
@@ -222,21 +292,18 @@ class PopupManager {
     emptyState.style.display = 'none';
     notificationsList.style.display = 'block';
     
-    // Use virtual scrolling for large notification lists
-    if (this.notifications.length > 20) {
+    if (this.notifications.length > 20 && !this.expandedNotificationId) {
       this.renderVirtualScrollNotifications(notificationsList);
     } else {
       this.renderAllNotifications(notificationsList);
     }
 
-    // Update mark all read button visibility
-    const hasUnread = this.notifications.some(n => !n.read);
+    const hasUnread = this.notifications.some(notification => !notification.read);
     const markAllBtn = document.getElementById('markAllReadBtn');
     markAllBtn.style.display = hasUnread ? 'flex' : 'none';
   }
 
   renderAllNotifications(container) {
-    // Use DocumentFragment for better performance
     const fragment = document.createDocumentFragment();
     
     this.notifications.forEach(notification => {
@@ -244,13 +311,11 @@ class PopupManager {
       fragment.appendChild(notificationElement);
     });
     
-    // Clear and append all at once
     container.innerHTML = '';
     container.appendChild(fragment);
   }
 
   renderVirtualScrollNotifications(container) {
-    // Implement virtual scrolling for large lists
     container.innerHTML = '';
     container.style.height = '400px';
     container.style.overflowY = 'auto';
@@ -268,17 +333,15 @@ class PopupManager {
     virtualContainer.appendChild(viewportContainer);
     container.appendChild(virtualContainer);
     
-    // Initial render
     this.updateVirtualScrollView(container, viewportContainer, 0);
     
-    // Add scroll listener with throttling
     let scrollTimeout;
     container.addEventListener('scroll', () => {
       if (scrollTimeout) clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         const scrollTop = container.scrollTop;
         this.updateVirtualScrollView(container, viewportContainer, scrollTop);
-      }, 16); // ~60fps
+      }, 16);
     });
   }
 
@@ -292,45 +355,43 @@ class PopupManager {
       Math.floor((scrollTop + containerHeight) / itemHeight) + bufferSize
     );
     
-    // Use DocumentFragment for batch DOM updates
     const fragment = document.createDocumentFragment();
     
-    for (let i = startIndex; i <= endIndex; i++) {
-      const notification = this.notifications[i];
+    for (let index = startIndex; index <= endIndex; index += 1) {
+      const notification = this.notifications[index];
       const element = this.createNotificationElement(notification);
       element.style.position = 'absolute';
-      element.style.top = `${i * itemHeight}px`;
+      element.style.top = `${index * itemHeight}px`;
       element.style.left = '0';
       element.style.right = '0';
       element.style.height = `${itemHeight}px`;
       fragment.appendChild(element);
     }
     
-    // Clear and update viewport
     viewportContainer.innerHTML = '';
     viewportContainer.appendChild(fragment);
   }
 
   createNotificationElement(notification) {
-    // Use template cloning for better performance
-    let template = this.getNotificationTemplate();
+    const template = this.getNotificationTemplate();
     const element = template.cloneNode(true);
     
     element.className = `notification-item ${notification.read ? 'read' : ''} ${notification.isUpdated ? 'updated' : ''}`;
+    if (this.expandedNotificationId === notification.id) {
+      element.classList.add('expanded');
+    }
     element.dataset.notificationId = this.sanitizeAttribute(notification.id);
 
     const formattedDate = this.formatDate(notification.updatedOn);
     
-    // Get template elements
     const contentDiv = element.querySelector('.notification-content');
     const titleDiv = element.querySelector('.notification-title');
     const metaDiv = element.querySelector('.notification-meta');
     const actionsDiv = element.querySelector('.notification-actions');
+    const advancedPanel = element.querySelector('.advanced-actions-panel');
     
-    // Clear and rebuild title
     titleDiv.innerHTML = '';
     
-    // Add update indicator if needed
     if (notification.isUpdated) {
       const updateIndicator = document.createElement('span');
       updateIndicator.className = 'update-indicator';
@@ -339,7 +400,6 @@ class PopupManager {
       titleDiv.appendChild(document.createTextNode(' '));
     }
     
-    // Add source badge
     if (notification.sourceType === 'assigned') {
       const badge = document.createElement('span');
       badge.className = 'source-badge assigned';
@@ -354,23 +414,23 @@ class PopupManager {
       titleDiv.appendChild(badge);
     }
     
-    // Add title text (safely escaped)
-    const titleText = document.createTextNode(notification.title || '');
-    titleDiv.appendChild(titleText);
+    titleDiv.appendChild(document.createTextNode(notification.title || ''));
     
-    // Update meta information
     metaDiv.innerHTML = '';
-    const projectSpan = document.createElement('span');
-    projectSpan.textContent = notification.project || '';
-    metaDiv.appendChild(projectSpan);
-    
-    const statusSpan = document.createElement('span');
-    statusSpan.textContent = notification.status || '';
-    metaDiv.appendChild(statusSpan);
-    
-    const dateSpan = document.createElement('span');
-    dateSpan.textContent = formattedDate;
-    metaDiv.appendChild(dateSpan);
+    const metaValues = [
+      notification.project || '',
+      notification.status || '',
+      notification.assigneeName
+        ? this.translate('assigneeMeta', [notification.assigneeName])
+        : '',
+      formattedDate
+    ].filter(Boolean);
+
+    metaValues.forEach(value => {
+      const metaSpan = document.createElement('span');
+      metaSpan.textContent = value;
+      metaDiv.appendChild(metaSpan);
+    });
     
     if (notification.isUpdated) {
       const updateText = document.createElement('span');
@@ -379,8 +439,19 @@ class PopupManager {
       metaDiv.appendChild(updateText);
     }
     
-    // Update actions
     actionsDiv.innerHTML = '';
+
+    const moreActionsButton = document.createElement('button');
+    moreActionsButton.className = 'more-actions-btn';
+    moreActionsButton.title = this.expandedNotificationId === notification.id
+      ? this.translate('hideActions')
+      : this.translate('moreActions');
+    moreActionsButton.textContent = '⋯';
+    moreActionsButton.addEventListener('click', event => {
+      event.stopPropagation();
+      this.toggleAdvancedActions(notification.id);
+    });
+    actionsDiv.appendChild(moreActionsButton);
     
     if (!notification.read) {
       const markReadBtn = document.createElement('button');
@@ -392,21 +463,520 @@ class PopupManager {
       buttonIcon.textContent = '✓';
       markReadBtn.appendChild(buttonIcon);
       
-      // Add click handler for mark as read button
-      markReadBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
+      markReadBtn.addEventListener('click', event => {
+        event.stopPropagation();
         this.markAsRead(notification.id);
       });
       
       actionsDiv.appendChild(markReadBtn);
     }
 
-    // Add click handler for the main notification area
+    if (this.expandedNotificationId === notification.id) {
+      this.renderAdvancedActionsPanel(notification, advancedPanel);
+    }
+ 
     contentDiv.addEventListener('click', () => {
       this.openNotification(notification);
     });
-
+ 
     return element;
+  }
+
+  getIssueActionState(notificationId) {
+    if (!this.issueActionStates.has(notificationId)) {
+      this.issueActionStates.set(notificationId, {
+        isLoading: false,
+        isSubmitting: false,
+        error: '',
+        success: '',
+        context: undefined,
+        replyText: '',
+        statusId: '',
+        assigneeId: ''
+      });
+    }
+
+    return this.issueActionStates.get(notificationId);
+  }
+
+  findNotification(notificationId) {
+    return this.notifications.find(notification => notification.id === notificationId);
+  }
+
+  syncIssueActionSelections(state) {
+    const context = state.context;
+    if (!context) {
+      state.statusId = '';
+      state.assigneeId = '';
+      return;
+    }
+
+    const currentStatusId = context.current?.statusId;
+    if (currentStatusId !== undefined) {
+      state.statusId = String(currentStatusId);
+    }
+
+    const currentAssigneeId = context.current?.assigneeId;
+    state.assigneeId = currentAssigneeId !== undefined ? String(currentAssigneeId) : '';
+  }
+
+  async toggleAdvancedActions(notificationId) {
+    if (this.expandedNotificationId === notificationId) {
+      this.expandedNotificationId = undefined;
+      this.renderNotifications();
+      return;
+    }
+
+    this.expandedNotificationId = notificationId;
+    const state = this.getIssueActionState(notificationId);
+    state.error = '';
+    state.success = '';
+    this.renderNotifications();
+
+    if (!state.context && !state.isLoading) {
+      await this.loadIssueActionContext(notificationId);
+    }
+  }
+
+  async loadIssueActionContext(notificationId) {
+    const notification = this.findNotification(notificationId);
+    if (!notification) {
+      return;
+    }
+
+    const state = this.getIssueActionState(notificationId);
+    state.isLoading = true;
+    state.error = '';
+    state.success = '';
+    this.renderNotifications();
+
+    try {
+      const response = await this.sendRuntimeMessage({
+        action: 'getIssueActionContext',
+        issueId: notification.issueId
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.error || this.translate('actionsUnavailable'));
+      }
+
+      state.context = response.context;
+      this.syncIssueActionSelections(state);
+    } catch (error) {
+      console.error('Failed to load issue action context:', error);
+      state.error = this.resolveRuntimeError(error);
+    } finally {
+      state.isLoading = false;
+      this.renderNotifications();
+    }
+  }
+
+  renderAdvancedActionsPanel(notification, panel) {
+    const state = this.getIssueActionState(notification.id);
+    panel.hidden = false;
+    panel.innerHTML = '';
+
+    if (state.error) {
+      panel.appendChild(this.createMessageElement('action-message error', state.error));
+    }
+
+    if (state.success) {
+      panel.appendChild(this.createMessageElement('action-message success', state.success));
+    }
+
+    if (state.isLoading) {
+      panel.appendChild(this.createMessageElement('action-message info', this.translate('loadingActions')));
+      return;
+    }
+
+    if (!state.context) {
+      if (!state.error) {
+        panel.appendChild(this.createMessageElement('action-message info', this.translate('actionsUnavailable')));
+      }
+      return;
+    }
+
+    let updateSubmitState = () => {};
+
+    panel.appendChild(this.createReplySection(notification, state, () => updateSubmitState()));
+    panel.appendChild(this.createStatusSection(notification, state, () => updateSubmitState()));
+    panel.appendChild(this.createAssigneeSection(notification, state, () => updateSubmitState()));
+
+    const submitSection = this.createCombinedSubmitSection(notification, state);
+    updateSubmitState = submitSection.updateSubmitState;
+    panel.appendChild(submitSection.element);
+  }
+
+  createMessageElement(className, message) {
+    const element = document.createElement('div');
+    element.className = className;
+    element.textContent = message;
+    return element;
+  }
+
+  createSectionHeader(titleText) {
+    const header = document.createElement('h3');
+    header.className = 'advanced-actions-title';
+    header.textContent = titleText;
+    return header;
+  }
+
+  createAdvancedActionControlId(notificationId, fieldName) {
+    return `advanced-actions-${this.sanitizeAttribute(notificationId)}-${fieldName}`;
+  }
+
+  createFieldLabel(labelText, controlId) {
+    const label = document.createElement('label');
+    label.className = 'advanced-actions-label';
+    label.textContent = labelText;
+    if (controlId) {
+      label.htmlFor = controlId;
+    }
+    return label;
+  }
+
+  createReplySection(notification, state, onStateChange = () => {}) {
+    const section = document.createElement('section');
+    section.className = 'advanced-actions-section';
+    section.appendChild(this.createSectionHeader(this.translate('quickReply')));
+
+    const textareaId = this.createAdvancedActionControlId(notification.id, 'reply');
+    const textarea = document.createElement('textarea');
+    textarea.id = textareaId;
+    textarea.className = 'advanced-actions-textarea';
+    textarea.placeholder = this.translate('replyPlaceholder');
+    textarea.value = state.replyText;
+    textarea.disabled = state.isSubmitting || !state.context.permissions.canReply;
+
+    const previewLabel = this.createFieldLabel(this.translate('markdownPreview'));
+    const preview = document.createElement('div');
+    preview.className = 'markdown-preview';
+    preview.innerHTML = this.renderMarkdown(state.replyText);
+
+    textarea.addEventListener('click', event => event.stopPropagation());
+    textarea.addEventListener('input', () => {
+      state.replyText = textarea.value;
+      preview.innerHTML = this.renderMarkdown(state.replyText);
+      onStateChange();
+    });
+
+    const label = this.createFieldLabel(this.translate('replyLabel'), textareaId);
+    section.appendChild(label);
+    section.appendChild(textarea);
+    section.appendChild(previewLabel);
+    section.appendChild(preview);
+
+    if (!state.context.permissions.canReply) {
+      section.appendChild(this.createMessageElement('action-hint', this.translate('permissionDenied')));
+    }
+
+    return section;
+  }
+
+  createStatusSection(notification, state, onStateChange = () => {}) {
+    const section = document.createElement('section');
+    section.className = 'advanced-actions-section';
+    section.appendChild(this.createSectionHeader(this.translate('changeStatus')));
+
+    const selectId = this.createAdvancedActionControlId(notification.id, 'status');
+    const label = this.createFieldLabel(this.translate('statusLabel'), selectId);
+    const select = document.createElement('select');
+    select.id = selectId;
+    select.className = 'advanced-actions-select';
+    select.disabled = state.isSubmitting || !state.context.permissions.canChangeStatus;
+
+    state.context.statusOptions.forEach(option => {
+      const optionElement = document.createElement('option');
+      optionElement.value = String(option.id);
+      optionElement.textContent = option.name;
+      if (String(option.id) === state.statusId) {
+        optionElement.selected = true;
+      }
+      select.appendChild(optionElement);
+    });
+
+    select.addEventListener('click', event => event.stopPropagation());
+    select.addEventListener('change', () => {
+      state.statusId = select.value;
+      onStateChange();
+    });
+
+    section.appendChild(label);
+    section.appendChild(select);
+
+    if (!state.context.permissions.canChangeStatus) {
+      section.appendChild(this.createMessageElement('action-hint', this.translate('permissionDenied')));
+    }
+
+    return section;
+  }
+
+  createAssigneeSection(notification, state, onStateChange = () => {}) {
+    const section = document.createElement('section');
+    section.className = 'advanced-actions-section';
+    section.appendChild(this.createSectionHeader(this.translate('changeAssignee')));
+
+    const selectId = this.createAdvancedActionControlId(notification.id, 'assignee');
+    const label = this.createFieldLabel(this.translate('assigneeLabel'), selectId);
+    const select = document.createElement('select');
+    select.id = selectId;
+    select.className = 'advanced-actions-select';
+    select.disabled = state.isSubmitting || !state.context.permissions.canChangeAssignee;
+
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = this.translate('selectAssignee');
+    placeholderOption.selected = !state.assigneeId;
+    select.appendChild(placeholderOption);
+
+    state.context.assigneeOptions.forEach(option => {
+      const optionElement = document.createElement('option');
+      optionElement.value = String(option.id);
+      optionElement.textContent = option.name;
+      if (String(option.id) === state.assigneeId) {
+        optionElement.selected = true;
+      }
+      select.appendChild(optionElement);
+    });
+
+    select.addEventListener('click', event => event.stopPropagation());
+    select.addEventListener('change', () => {
+      state.assigneeId = select.value;
+      onStateChange();
+    });
+
+    section.appendChild(label);
+    section.appendChild(select);
+
+    if (!state.context.permissions.canChangeAssignee) {
+      section.appendChild(this.createMessageElement('action-hint', this.translate('permissionDenied')));
+    }
+
+    return section;
+  }
+
+  createCombinedSubmitSection(notification, state) {
+    const section = document.createElement('section');
+    section.className = 'advanced-actions-footer';
+
+    const hint = document.createElement('p');
+    hint.className = 'advanced-actions-submit-hint';
+    hint.textContent = this.translate('submitChangesHint');
+
+    const submitButton = document.createElement('button');
+    submitButton.className = 'advanced-action-button primary combined-submit-button';
+    submitButton.textContent = this.translate('submitChanges');
+
+    const updateSubmitState = () => {
+      submitButton.disabled = state.isSubmitting || !this.hasPendingIssueChanges(state);
+    };
+
+    submitButton.addEventListener('click', event => {
+      event.stopPropagation();
+      this.submitIssueChanges(notification.id);
+    });
+
+    updateSubmitState();
+    section.appendChild(hint);
+    section.appendChild(submitButton);
+
+    return {
+      element: section,
+      updateSubmitState
+    };
+  }
+
+  renderMarkdown(markdownText) {
+    if (typeof markdownText !== 'string' || !markdownText.trim()) {
+      return `<p class="markdown-preview-placeholder">${this.escapeHtml(this.translate('noPreview'))}</p>`;
+    }
+
+    const blocks = [];
+    const lines = markdownText.split(/\r?\n/);
+    let listType;
+    let listItems = [];
+
+    const flushList = () => {
+      if (!listType || listItems.length === 0) {
+        listType = undefined;
+        listItems = [];
+        return;
+      }
+
+      blocks.push(`<${listType}>${listItems.map(item => `<li>${item}</li>`).join('')}</${listType}>`);
+      listType = undefined;
+      listItems = [];
+    };
+
+    lines.forEach(line => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) {
+        flushList();
+        return;
+      }
+
+      const unorderedListMatch = /^[-*]\s+(.+)$/.exec(trimmedLine);
+      if (unorderedListMatch) {
+        if (listType && listType !== 'ul') {
+          flushList();
+        }
+        listType = 'ul';
+        listItems.push(this.renderInlineMarkdown(unorderedListMatch[1]));
+        return;
+      }
+
+      const orderedListMatch = /^\d+\.\s+(.+)$/.exec(trimmedLine);
+      if (orderedListMatch) {
+        if (listType && listType !== 'ol') {
+          flushList();
+        }
+        listType = 'ol';
+        listItems.push(this.renderInlineMarkdown(orderedListMatch[1]));
+        return;
+      }
+
+      flushList();
+      blocks.push(`<p>${this.renderInlineMarkdown(trimmedLine)}</p>`);
+    });
+
+    flushList();
+    return blocks.join('');
+  }
+
+  renderInlineMarkdown(text) {
+    let renderedText = this.escapeHtml(text);
+
+    renderedText = renderedText.replace(
+      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      (_match, label, url) => {
+        const safeUrl = this.sanitizeUrl(url);
+        if (safeUrl === '#') {
+          return label;
+        }
+
+        return `<a href="${this.escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+      }
+    );
+    renderedText = renderedText.replace(/`([^`]+)`/g, '<code>$1</code>');
+    renderedText = renderedText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    renderedText = renderedText.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+    return renderedText;
+  }
+
+  getPendingIssueChanges(state) {
+    const pendingChanges = {};
+    const trimmedReply = typeof state.replyText === 'string' ? state.replyText.trim() : '';
+
+    if (trimmedReply) {
+      pendingChanges.reply = trimmedReply;
+    }
+
+    if (
+      state.context?.permissions?.canChangeStatus
+      && state.statusId
+      && String(state.context.current?.statusId) !== state.statusId
+    ) {
+      pendingChanges.statusId = Number.parseInt(state.statusId, 10);
+    }
+
+    if (
+      state.context?.permissions?.canChangeAssignee
+      && state.assigneeId
+      && String(state.context.current?.assigneeId || '') !== state.assigneeId
+    ) {
+      pendingChanges.assigneeId = Number.parseInt(state.assigneeId, 10);
+    }
+
+    return pendingChanges;
+  }
+
+  hasPendingIssueChanges(state) {
+    return Object.keys(this.getPendingIssueChanges(state)).length > 0;
+  }
+
+  async executeIssueAction(notificationId, message, successMessageKey) {
+    const notification = this.findNotification(notificationId);
+    if (!notification) {
+      return;
+    }
+
+    const state = this.getIssueActionState(notificationId);
+    state.isSubmitting = true;
+    state.error = '';
+    state.success = '';
+    this.renderNotifications();
+
+    try {
+      const response = await this.sendRuntimeMessage(message);
+
+      if (!response?.success) {
+        throw new Error(response?.error || this.translate('actionsUnavailable'));
+      }
+
+      if (response.notification) {
+        this.updateNotificationFromAction(response.notification);
+      }
+
+      if (response.context) {
+        state.context = response.context;
+        this.syncIssueActionSelections(state);
+      }
+
+      if (message.action === 'applyIssueChanges' && message.changes?.reply !== undefined) {
+        state.replyText = '';
+      }
+
+      state.success = this.translate(successMessageKey);
+    } catch (error) {
+      console.error('Issue action failed:', error);
+      state.error = this.resolveRuntimeError(error);
+    } finally {
+      state.isSubmitting = false;
+      this.renderNotifications();
+    }
+  }
+
+  updateNotificationFromAction(notification) {
+    const normalizedNotification = this.normalizeNotification(notification);
+    const existingNotification = this.findNotification(normalizedNotification.id);
+    const mergedNotification = existingNotification
+      ? { ...existingNotification, ...normalizedNotification }
+      : normalizedNotification;
+
+    const existingIndex = this.notifications.findIndex(item => item.id === mergedNotification.id);
+    if (existingIndex >= 0) {
+      this.notifications.splice(existingIndex, 1, mergedNotification);
+    } else {
+      this.notifications.push(mergedNotification);
+    }
+
+    this.notifications.sort((left, right) => right.updatedOn - left.updatedOn);
+  }
+
+  async submitIssueChanges(notificationId) {
+    const state = this.getIssueActionState(notificationId);
+    const notification = this.findNotification(notificationId);
+    if (!notification) {
+      return;
+    }
+
+    const changes = this.getPendingIssueChanges(state);
+    if (Object.keys(changes).length === 0) {
+      state.error = this.translate('noChangesToSubmit');
+      this.renderNotifications();
+      return;
+    }
+
+    await this.executeIssueAction(
+      notificationId,
+      {
+        action: 'applyIssueChanges',
+        issueId: notification.issueId,
+        changes
+      },
+      'issueChangesSuccess'
+    );
   }
 
   formatDate(date) {
@@ -440,7 +1010,6 @@ class PopupManager {
     if (typeof value !== 'string') {
       return String(value || '');
     }
-    // Remove any characters that could be dangerous in attributes
     return value.replace(/[<>"'&]/g, '');
   }
 
@@ -450,18 +1019,16 @@ class PopupManager {
     }
     try {
       const urlObj = new URL(url);
-      // Only allow http and https protocols
       if (urlObj.protocol === 'http:' || urlObj.protocol === 'https:') {
         return url;
       }
-    } catch (e) {
+    } catch (error) {
       console.warn('Invalid URL provided:', url);
     }
     return '#';
   }
 
   async openNotification(notification) {
-    // Sanitize and validate the URL before opening
     const safeUrl = this.sanitizeUrl(notification.url);
     if (safeUrl === '#') {
       console.error('Invalid or unsafe URL detected:', notification.url);
@@ -469,10 +1036,7 @@ class PopupManager {
     }
     
     try {
-      // Open the issue URL in a new tab
       await chrome.tabs.create({ url: safeUrl });
-      
-      // Close the popup
       window.close();
     } catch (error) {
       console.error('Failed to open notification URL:', error);
@@ -481,16 +1045,17 @@ class PopupManager {
 
   async markAsRead(notificationId) {
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = await this.sendRuntimeMessage({
         action: 'markAsRead',
-        notificationId: notificationId
+        notificationId
       });
       
       if (response.success) {
-        // Remove the notification from the array instead of just marking it as read
-        this.notifications = this.notifications.filter(n => n.id !== notificationId);
-        
-        // Re-render the notifications
+        this.notifications = this.notifications.filter(notification => notification.id !== notificationId);
+        this.issueActionStates.delete(notificationId);
+        if (this.expandedNotificationId === notificationId) {
+          this.expandedNotificationId = undefined;
+        }
         this.renderNotifications();
       }
     } catch (error) {
@@ -500,13 +1065,12 @@ class PopupManager {
 
   async markAllAsRead() {
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'markAllAsRead' });
+      const response = await this.sendRuntimeMessage({ action: 'markAllAsRead' });
       
       if (response.success) {
-        // Clear all notifications after marking as read
         this.notifications = [];
-        
-        // Re-render the notifications (will show empty state)
+        this.issueActionStates.clear();
+        this.expandedNotificationId = undefined;
         this.renderNotifications();
       }
     } catch (error) {
@@ -515,55 +1079,52 @@ class PopupManager {
   }
 
   async refreshNotifications() {
-    // Add visual feedback for refresh
     const refreshBtn = document.getElementById('refreshBtn');
     const originalTransform = refreshBtn.style.transform;
     refreshBtn.style.transform = 'rotate(360deg)';
     refreshBtn.style.transition = 'transform 0.3s ease-in-out';
     refreshBtn.disabled = true;
     
-    // Show loading state
     this.showLoading();
     
-    // Reset transform after animation
     setTimeout(() => {
       refreshBtn.style.transform = originalTransform;
       refreshBtn.disabled = false;
     }, 300);
 
-    // Force refresh notifications
     try {
-      const response = await chrome.runtime.sendMessage({ 
+      const response = await this.sendRuntimeMessage({ 
         action: 'forceRefreshNotifications' 
       });
       
       if (response.success) {
-        // Show all unread notifications (including updated ones)
-        this.notifications = response.notifications.filter(notification => !notification.read);
+        this.notifications = response.notifications
+          .filter(notification => !notification.read)
+          .map(notification => this.normalizeNotification(notification));
+        this.pruneIssueActionState();
         this.renderNotifications();
       } else {
-        // If force refresh fails, try regular refresh
         this.loadNotifications();
       }
     } catch (error) {
       console.error('Failed to refresh notifications:', error);
-      // Fallback to regular load
       this.loadNotifications();
     }
   }
 
   async clearAllNotifications() {
-    // Show confirmation dialog
     const confirmed = confirm(this.translate('clearAllConfirmation'));
     if (!confirmed) return;
     
     try {
-      const response = await chrome.runtime.sendMessage({ 
+      const response = await this.sendRuntimeMessage({ 
         action: 'clearAllNotifications' 
       });
       
       if (response.success) {
         this.notifications = [];
+        this.issueActionStates.clear();
+        this.expandedNotificationId = undefined;
         this.renderNotifications();
       } else {
         alert(this.translate('clearAllError'));
@@ -575,7 +1136,6 @@ class PopupManager {
   }
 }
 
-// Initialize the popup when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   new PopupManager();
 });

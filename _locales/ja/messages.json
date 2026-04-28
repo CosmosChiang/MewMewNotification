@@ -31,6 +31,26 @@
     "message": "既読にする",
     "description": "Mark as read button tooltip"
   },
+  "moreActions": {
+    "message": "その他の操作",
+    "description": "Expand advanced actions button tooltip"
+  },
+  "hideActions": {
+    "message": "操作を閉じる",
+    "description": "Collapse advanced actions button tooltip"
+  },
+  "loadingActions": {
+    "message": "利用可能な操作を読み込み中...",
+    "description": "Loading message for advanced issue actions"
+  },
+  "actionsUnavailable": {
+    "message": "現在は高度な操作を読み込めません。",
+    "description": "Fallback message when advanced issue actions cannot be loaded"
+  },
+  "backgroundNoResponse": {
+    "message": "バックグラウンドサービスから応答がありません。拡張機能を再読み込みしてから再試行してください。",
+    "description": "Error shown when the popup does not receive a response from the background service"
+  },
   "settings": {
     "message": "設定",
     "description": "Settings button tooltip"
@@ -54,6 +74,82 @@
   "updated": {
     "message": "更新済み",
     "description": "Label shown for items that have been updated"
+  },
+  "quickReply": {
+    "message": "クイック返信",
+    "description": "Section title for issue quick reply"
+  },
+  "replyLabel": {
+    "message": "返信内容",
+    "description": "Label for issue reply textarea"
+  },
+  "replyPlaceholder": {
+    "message": "Markdown を使ってコメントを入力...",
+    "description": "Placeholder for issue reply textarea"
+  },
+  "markdownPreview": {
+    "message": "Markdown プレビュー",
+    "description": "Label for the Markdown preview area"
+  },
+  "noPreview": {
+    "message": "入力するとプレビューが表示されます。",
+    "description": "Empty state for the Markdown preview area"
+  },
+  "replyRequired": {
+    "message": "返信内容を入力してください。",
+    "description": "Validation message when issue reply content is empty"
+  },
+  "replyTooLong": {
+    "message": "返信内容が長すぎます。",
+    "description": "Validation message when issue reply content is too long"
+  },
+  "changeStatus": {
+    "message": "ステータス変更",
+    "description": "Section title for issue status updates"
+  },
+  "statusLabel": {
+    "message": "ステータス",
+    "description": "Label for the issue status select field"
+  },
+  "changeAssignee": {
+    "message": "担当者変更",
+    "description": "Section title for issue assignee updates"
+  },
+  "assigneeLabel": {
+    "message": "担当者",
+    "description": "Label for the issue assignee select field"
+  },
+  "selectAssignee": {
+    "message": "担当者を選択",
+    "description": "Placeholder option for the assignee select field"
+  },
+  "assigneeMeta": {
+    "message": "担当: $1",
+    "description": "Meta label for the current assignee on a notification card"
+  },
+  "permissionDenied": {
+    "message": "この操作を実行する権限がありません。",
+    "description": "Permission denied message for advanced issue actions"
+  },
+  "issueActionValidationError": {
+    "message": "Issue 操作リクエストが無効です。",
+    "description": "Validation error message for advanced issue actions"
+  },
+  "submitChanges": {
+    "message": "変更を送信",
+    "description": "Button label for submitting all pending issue changes"
+  },
+  "submitChangesHint": {
+    "message": "入力または変更された項目だけ送信され、空欄の項目は自動的にスキップされます。",
+    "description": "Hint shown above the combined issue changes submit button"
+  },
+  "noChangesToSubmit": {
+    "message": "送信する変更がありません。",
+    "description": "Message shown when the user tries to submit without any pending changes"
+  },
+  "issueChangesSuccess": {
+    "message": "変更を送信しました。",
+    "description": "Success message after submitting combined issue changes"
   },
   "optionsTitle": {
     "message": "設定",
@@ -191,9 +287,9 @@
     "message": "MewMewNotification",
     "description": "Application name in about section"
   },
-  "version": {
-    "message": "バージョン：1.0.1",
-    "description": "Version information"
+  "versionLabel": {
+    "message": "バージョン",
+    "description": "Label for manifest version in about section"
   },
   "appDescription": {
     "message": "MewMewNotification - Redmine 通知を効率的に受信するための Chrome 拡張機能です。",

@@ -112,7 +112,7 @@ function loadBackgroundModule(chromeMock) {
   };
 
   vm.runInNewContext(
-    `${source}\nmodule.exports = { NotificationManager, HOST_PERMISSION_RECOVERY_NOTIFICATION_ID };`,
+    `${source}\nmodule.exports = { NotificationManager, RedmineAPI, HOST_PERMISSION_RECOVERY_NOTIFICATION_ID };`,
     sandbox,
     { filename: filePath }
   );
@@ -216,5 +216,135 @@ describe('NotificationManager host permission recovery', () => {
       includeWatchedIssues: true
     }));
     await expect(manager.checkNotifications()).resolves.toBeUndefined();
+  });
+
+  test('returns updated notification payload after applying combined issue changes', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.settings = {
+      redmineUrl: 'https://redmine.example.com',
+      apiKey: 'valid-api-key-123',
+      readNotifications: []
+    };
+    manager.notifications.set('issue_7', {
+      id: 'issue_7',
+      read: false,
+      sourceType: 'assigned'
+    });
+    manager.createApiClient = jest.fn().mockResolvedValue({
+      applyIssueChanges: jest.fn().mockResolvedValue({}),
+      getIssueActionContext: jest.fn().mockResolvedValue({
+        issue: {
+          id: 7,
+          subject: 'Review popup actions',
+          project: { id: 2, name: 'Web' },
+          author: { name: 'Alice' },
+          status: { id: 3, name: 'Resolved' },
+          priority: { name: 'Normal' },
+          assigned_to: { id: 9, name: 'Bob' },
+          updated_on: '2026-04-28T08:00:00.000Z'
+        },
+        permissions: {
+          canReply: true,
+          canChangeStatus: true,
+          canChangeAssignee: true
+        },
+        current: {
+          statusId: 3,
+          assigneeId: 9
+        },
+        statusOptions: [{ id: 3, name: 'Resolved' }],
+        assigneeOptions: [{ id: 9, name: 'Bob' }]
+      })
+    });
+    chromeMock.storage.local.get.mockResolvedValue({ issueStates: {} });
+
+    const result = await manager.applyIssueChanges(7, {
+      reply: 'Looks good',
+      statusId: 3
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      notification: expect.objectContaining({
+        id: 'issue_7',
+        status: 'Resolved',
+        url: 'https://redmine.example.com/issues/7',
+        sourceType: 'assigned'
+      }),
+      context: expect.objectContaining({
+        current: expect.objectContaining({ statusId: 3 })
+      })
+    }));
+    expect(chromeMock.storage.local.set).toHaveBeenCalledWith(expect.objectContaining({
+      issueStates: expect.objectContaining({
+        7: expect.objectContaining({
+          status: 'Resolved',
+          subject: 'Review popup actions'
+        })
+      })
+    }));
+  });
+
+  test('builds combined issue updates from only changed fields', () => {
+    const chromeMock = createChromeMock();
+    const { RedmineAPI } = loadBackgroundModule(chromeMock);
+    const api = new RedmineAPI('https://redmine.example.com', 'valid-api-key-123');
+
+    expect(api.buildIssueUpdateData({
+      reply: '  Looks good  ',
+      statusId: 3,
+      assigneeId: undefined
+    })).toEqual({
+      notes: 'Looks good',
+      status_id: 3
+    });
+  });
+
+  test('rejects partially numeric identifiers when parsing positive integers', () => {
+    const chromeMock = createChromeMock();
+    const { RedmineAPI } = loadBackgroundModule(chromeMock);
+    const api = new RedmineAPI('https://redmine.example.com', 'valid-api-key-123');
+
+    expect(api.parsePositiveInteger(7, 'issue id')).toBe(7);
+    expect(api.parsePositiveInteger('07', 'issue id')).toBe(7);
+    expect(() => api.parsePositiveInteger('7abc', 'issue id')).toThrow('Invalid issue id');
+    expect(() => api.parsePositiveInteger('1.5', 'status id')).toThrow('Invalid status id');
+  });
+
+  test('maps forbidden issue actions to a permission error', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.createApiClient = jest.fn().mockResolvedValue({
+      applyIssueChanges: jest.fn().mockRejectedValue(new Error('Access forbidden - insufficient permissions'))
+    });
+    manager.translate = jest.fn((key) => key);
+
+    const result = await manager.applyIssueChanges(7, { statusId: 3 });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'permissionDenied'
+    });
+  });
+
+  test('message handler returns a useful error for non-Error throws', async () => {
+    const chromeMock = createChromeMock();
+    loadBackgroundModule(chromeMock);
+    await new Promise(resolve => setImmediate(resolve));
+    chromeMock.storage.sync.get.mockRejectedValue('storage unavailable');
+    const handler = chromeMock.runtime.onMessage.addListener.mock.calls[0][0];
+    const sendResponse = jest.fn();
+
+    const keepsChannelOpen = handler({ action: 'markAllAsRead' }, {}, sendResponse);
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(keepsChannelOpen).toBe(true);
+    expect(sendResponse).toHaveBeenCalledWith({
+      success: false,
+      error: 'storage unavailable'
+    });
   });
 });

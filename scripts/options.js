@@ -380,7 +380,6 @@ class OptionsManager {
       'languageSelectLabel': 'selectLanguage',
       'aboutTitle': 'about',
       'aboutAppName': 'appName',
-      'aboutVersion': 'version',
       'aboutDescription': 'appDescription',
       'featuresTitle': 'features',
       'feature1': 'feature1',
@@ -409,6 +408,8 @@ class OptionsManager {
       }
     });
 
+    this.updateVersionDisplay();
+
     // Update input placeholders
     const placeholders = {
       'redmineUrl': 'redmineUrlPlaceholder',
@@ -424,6 +425,17 @@ class OptionsManager {
 
     // Update select options
     this.updateSelectOptions();
+  }
+
+  updateVersionDisplay() {
+    const element = document.getElementById('aboutVersion');
+    if (!element) {
+      return;
+    }
+
+    const version = globalThis.chrome?.runtime?.getManifest?.().version || '';
+    const label = this.translate('versionLabel');
+    element.textContent = version ? `${label}: ${version}` : label;
   }
 
   updateSelectOptions() {

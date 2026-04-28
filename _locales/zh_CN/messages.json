@@ -31,6 +31,26 @@
     "message": "标记为已读",
     "description": "Mark as read button tooltip"
   },
+  "moreActions": {
+    "message": "更多操作",
+    "description": "Expand advanced actions button tooltip"
+  },
+  "hideActions": {
+    "message": "收起操作",
+    "description": "Collapse advanced actions button tooltip"
+  },
+  "loadingActions": {
+    "message": "正在加载可用操作...",
+    "description": "Loading message for advanced issue actions"
+  },
+  "actionsUnavailable": {
+    "message": "当前无法加载高级操作。",
+    "description": "Fallback message when advanced issue actions cannot be loaded"
+  },
+  "backgroundNoResponse": {
+    "message": "后台服务没有响应，请刷新扩展后再试一次。",
+    "description": "Error shown when the popup does not receive a response from the background service"
+  },
   "settings": {
     "message": "设置",
     "description": "Settings button tooltip"
@@ -54,6 +74,82 @@
   "updated": {
     "message": "已更新",
     "description": "Label shown for items that have been updated"
+  },
+  "quickReply": {
+    "message": "快速回复",
+    "description": "Section title for issue quick reply"
+  },
+  "replyLabel": {
+    "message": "回复内容",
+    "description": "Label for issue reply textarea"
+  },
+  "replyPlaceholder": {
+    "message": "输入支持 Markdown 的回复内容...",
+    "description": "Placeholder for issue reply textarea"
+  },
+  "markdownPreview": {
+    "message": "Markdown 预览",
+    "description": "Label for the Markdown preview area"
+  },
+  "noPreview": {
+    "message": "开始输入后即可看到预览。",
+    "description": "Empty state for the Markdown preview area"
+  },
+  "replyRequired": {
+    "message": "请输入回复内容。",
+    "description": "Validation message when issue reply content is empty"
+  },
+  "replyTooLong": {
+    "message": "回复内容过长。",
+    "description": "Validation message when issue reply content is too long"
+  },
+  "changeStatus": {
+    "message": "更改状态",
+    "description": "Section title for issue status updates"
+  },
+  "statusLabel": {
+    "message": "状态",
+    "description": "Label for the issue status select field"
+  },
+  "changeAssignee": {
+    "message": "更改指派人",
+    "description": "Section title for issue assignee updates"
+  },
+  "assigneeLabel": {
+    "message": "指派人",
+    "description": "Label for the issue assignee select field"
+  },
+  "selectAssignee": {
+    "message": "选择指派人",
+    "description": "Placeholder option for the assignee select field"
+  },
+  "assigneeMeta": {
+    "message": "指派：$1",
+    "description": "Meta label for the current assignee on a notification card"
+  },
+  "permissionDenied": {
+    "message": "您没有执行此操作的权限。",
+    "description": "Permission denied message for advanced issue actions"
+  },
+  "issueActionValidationError": {
+    "message": "议题操作请求无效。",
+    "description": "Validation error message for advanced issue actions"
+  },
+  "submitChanges": {
+    "message": "提交更改",
+    "description": "Button label for submitting all pending issue changes"
+  },
+  "submitChangesHint": {
+    "message": "只会提交已填写或已更改的字段，未填写的内容会自动跳过。",
+    "description": "Hint shown above the combined issue changes submit button"
+  },
+  "noChangesToSubmit": {
+    "message": "当前没有可提交的更改。",
+    "description": "Message shown when the user tries to submit without any pending changes"
+  },
+  "issueChangesSuccess": {
+    "message": "更改已成功提交。",
+    "description": "Success message after submitting combined issue changes"
   },
   "optionsTitle": {
     "message": "设置",
@@ -191,9 +287,9 @@
     "message": "MewMewNotification",
     "description": "Application name in about section"
   },
-  "version": {
-    "message": "版本：1.0.1",
-    "description": "Version information"
+  "versionLabel": {
+    "message": "版本",
+    "description": "Label for manifest version in about section"
   },
   "appDescription": {
     "message": "MewMewNotification - 用于高效接收 Redmine 通知的 Chrome 扩展。",
