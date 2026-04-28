@@ -211,6 +211,10 @@ body {
   cursor: default;
 }
 
+.notification-item.expanded .notification-content {
+  cursor: pointer;
+}
+
 .notification-item.updated {
   opacity: 1;
   border-left-color: #ff9800;

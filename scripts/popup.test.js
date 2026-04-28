@@ -260,6 +260,48 @@ describe('PopupManager', () => {
     }));
   });
 
+  test('associates advanced action labels with their controls', () => {
+    const notification = { id: 'issue_11' };
+    const state = {
+      isSubmitting: false,
+      replyText: 'Draft',
+      statusId: '2',
+      assigneeId: '9',
+      context: {
+        permissions: {
+          canReply: true,
+          canChangeStatus: true,
+          canChangeAssignee: true
+        },
+        current: {
+          statusId: 2,
+          assigneeId: 9
+        },
+        statusOptions: [
+          { id: 2, name: 'In Progress' }
+        ],
+        assigneeOptions: [
+          { id: 9, name: 'Alice' }
+        ]
+      }
+    };
+
+    const replySection = manager.createReplySection(notification, state);
+    const replyChildren = replySection.appendChild.mock.calls.map(([child]) => child);
+    expect(replyChildren[1].htmlFor).toBe('advanced-actions-issue_11-reply');
+    expect(replyChildren[2].id).toBe('advanced-actions-issue_11-reply');
+
+    const statusSection = manager.createStatusSection(notification, state);
+    const statusChildren = statusSection.appendChild.mock.calls.map(([child]) => child);
+    expect(statusChildren[1].htmlFor).toBe('advanced-actions-issue_11-status');
+    expect(statusChildren[2].id).toBe('advanced-actions-issue_11-status');
+
+    const assigneeSection = manager.createAssigneeSection(notification, state);
+    const assigneeChildren = assigneeSection.appendChild.mock.calls.map(([child]) => child);
+    expect(assigneeChildren[1].htmlFor).toBe('advanced-actions-issue_11-assignee');
+    expect(assigneeChildren[2].id).toBe('advanced-actions-issue_11-assignee');
+  });
+
   test('submits only changed fields with the combined submit action', async () => {
     manager.renderNotifications = jest.fn();
     manager.notifications = [

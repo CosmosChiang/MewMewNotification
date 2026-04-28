@@ -416,11 +416,28 @@ class RedmineAPI {
   }
 
   parsePositiveInteger(value, fieldName = 'identifier') {
-    const parsedValue = Number.parseInt(value, 10);
-    if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
-      throw new Error(`Invalid ${fieldName}`);
+    if (typeof value === 'number') {
+      if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new Error(`Invalid ${fieldName}`);
+      }
+      return value;
     }
-    return parsedValue;
+
+    if (typeof value === 'string') {
+      const trimmedValue = value.trim();
+      if (!/^[0-9]+$/.test(trimmedValue)) {
+        throw new Error(`Invalid ${fieldName}`);
+      }
+
+      const parsedValue = Number(trimmedValue);
+      if (!Number.isSafeInteger(parsedValue) || parsedValue <= 0) {
+        throw new Error(`Invalid ${fieldName}`);
+      }
+
+      return parsedValue;
+    }
+
+    throw new Error(`Invalid ${fieldName}`);
   }
 
   sanitizeIssueNotes(notes) {

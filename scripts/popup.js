@@ -621,10 +621,17 @@ class PopupManager {
     return header;
   }
 
-  createFieldLabel(labelText) {
+  createAdvancedActionControlId(notificationId, fieldName) {
+    return `advanced-actions-${this.sanitizeAttribute(notificationId)}-${fieldName}`;
+  }
+
+  createFieldLabel(labelText, controlId) {
     const label = document.createElement('label');
     label.className = 'advanced-actions-label';
     label.textContent = labelText;
+    if (controlId) {
+      label.htmlFor = controlId;
+    }
     return label;
   }
 
@@ -633,7 +640,9 @@ class PopupManager {
     section.className = 'advanced-actions-section';
     section.appendChild(this.createSectionHeader(this.translate('quickReply')));
 
+    const textareaId = this.createAdvancedActionControlId(notification.id, 'reply');
     const textarea = document.createElement('textarea');
+    textarea.id = textareaId;
     textarea.className = 'advanced-actions-textarea';
     textarea.placeholder = this.translate('replyPlaceholder');
     textarea.value = state.replyText;
@@ -651,7 +660,7 @@ class PopupManager {
       onStateChange();
     });
 
-    const label = this.createFieldLabel(this.translate('replyLabel'));
+    const label = this.createFieldLabel(this.translate('replyLabel'), textareaId);
     section.appendChild(label);
     section.appendChild(textarea);
     section.appendChild(previewLabel);
@@ -669,8 +678,10 @@ class PopupManager {
     section.className = 'advanced-actions-section';
     section.appendChild(this.createSectionHeader(this.translate('changeStatus')));
 
-    const label = this.createFieldLabel(this.translate('statusLabel'));
+    const selectId = this.createAdvancedActionControlId(notification.id, 'status');
+    const label = this.createFieldLabel(this.translate('statusLabel'), selectId);
     const select = document.createElement('select');
+    select.id = selectId;
     select.className = 'advanced-actions-select';
     select.disabled = state.isSubmitting || !state.context.permissions.canChangeStatus;
 
@@ -705,8 +716,10 @@ class PopupManager {
     section.className = 'advanced-actions-section';
     section.appendChild(this.createSectionHeader(this.translate('changeAssignee')));
 
-    const label = this.createFieldLabel(this.translate('assigneeLabel'));
+    const selectId = this.createAdvancedActionControlId(notification.id, 'assignee');
+    const label = this.createFieldLabel(this.translate('assigneeLabel'), selectId);
     const select = document.createElement('select');
+    select.id = selectId;
     select.className = 'advanced-actions-select';
     select.disabled = state.isSubmitting || !state.context.permissions.canChangeAssignee;
 

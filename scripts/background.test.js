@@ -302,6 +302,17 @@ describe('NotificationManager host permission recovery', () => {
     });
   });
 
+  test('rejects partially numeric identifiers when parsing positive integers', () => {
+    const chromeMock = createChromeMock();
+    const { RedmineAPI } = loadBackgroundModule(chromeMock);
+    const api = new RedmineAPI('https://redmine.example.com', 'valid-api-key-123');
+
+    expect(api.parsePositiveInteger(7, 'issue id')).toBe(7);
+    expect(api.parsePositiveInteger('07', 'issue id')).toBe(7);
+    expect(() => api.parsePositiveInteger('7abc', 'issue id')).toThrow('Invalid issue id');
+    expect(() => api.parsePositiveInteger('1.5', 'status id')).toThrow('Invalid status id');
+  });
+
   test('maps forbidden issue actions to a permission error', async () => {
     const chromeMock = createChromeMock();
     const { NotificationManager } = loadBackgroundModule(chromeMock);
