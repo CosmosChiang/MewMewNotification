@@ -95,14 +95,6 @@
     "message": "入力するとプレビューが表示されます。",
     "description": "Empty state for the Markdown preview area"
   },
-  "submitReply": {
-    "message": "返信を送信",
-    "description": "Button label for submitting an issue reply"
-  },
-  "replySuccess": {
-    "message": "返信を送信しました。",
-    "description": "Success message after posting an issue reply"
-  },
   "replyRequired": {
     "message": "返信内容を入力してください。",
     "description": "Validation message when issue reply content is empty"
@@ -119,14 +111,6 @@
     "message": "ステータス",
     "description": "Label for the issue status select field"
   },
-  "updateStatus": {
-    "message": "ステータスを更新",
-    "description": "Button label for issue status updates"
-  },
-  "statusUpdateSuccess": {
-    "message": "ステータスを更新しました。",
-    "description": "Success message after updating issue status"
-  },
   "changeAssignee": {
     "message": "担当者変更",
     "description": "Section title for issue assignee updates"
@@ -138,14 +122,6 @@
   "selectAssignee": {
     "message": "担当者を選択",
     "description": "Placeholder option for the assignee select field"
-  },
-  "updateAssignee": {
-    "message": "担当者を更新",
-    "description": "Button label for issue assignee updates"
-  },
-  "assigneeUpdateSuccess": {
-    "message": "担当者を更新しました。",
-    "description": "Success message after updating issue assignee"
   },
   "assigneeMeta": {
     "message": "担当: $1",
@@ -311,9 +287,9 @@
     "message": "MewMewNotification",
     "description": "Application name in about section"
   },
-  "version": {
-    "message": "バージョン：1.2.0",
-    "description": "Version information"
+  "versionLabel": {
+    "message": "バージョン",
+    "description": "Label for manifest version in about section"
   },
   "appDescription": {
     "message": "MewMewNotification - Redmine 通知を効率的に受信するための Chrome 拡張機能です。",

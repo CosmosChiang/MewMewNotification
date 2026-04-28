@@ -139,14 +139,6 @@
     "message": "Start typing to see a preview.",
     "description": "Empty state for the Markdown preview area"
   },
-  "submitReply": {
-    "message": "Submit reply",
-    "description": "Button label for submitting an issue reply"
-  },
-  "replySuccess": {
-    "message": "Reply posted successfully.",
-    "description": "Success message after posting an issue reply"
-  },
   "replyRequired": {
     "message": "Reply content is required.",
     "description": "Validation message when issue reply content is empty"
@@ -163,14 +155,6 @@
     "message": "Status",
     "description": "Label for the issue status select field"
   },
-  "updateStatus": {
-    "message": "Update status",
-    "description": "Button label for issue status updates"
-  },
-  "statusUpdateSuccess": {
-    "message": "Status updated successfully.",
-    "description": "Success message after updating issue status"
-  },
   "changeAssignee": {
     "message": "Change assignee",
     "description": "Section title for issue assignee updates"
@@ -182,14 +166,6 @@
   "selectAssignee": {
     "message": "Select an assignee",
     "description": "Placeholder option for the assignee select field"
-  },
-  "updateAssignee": {
-    "message": "Update assignee",
-    "description": "Button label for issue assignee updates"
-  },
-  "assigneeUpdateSuccess": {
-    "message": "Assignee updated successfully.",
-    "description": "Success message after updating issue assignee"
   },
   "assigneeMeta": {
     "message": "Assignee: $1",
@@ -311,9 +287,9 @@
     "message": "MewMewNotification",
     "description": "Application name in about section"
   },
-  "version": {
-    "message": "Version: 1.2.0",
-    "description": "Version information"
+  "versionLabel": {
+    "message": "Version",
+    "description": "Label for manifest version in about section"
   },
   "appDescription": {
     "message": "MewMewNotification - Chrome extension for receiving Redmine notifications efficiently.",

@@ -329,4 +329,22 @@ describe('NotificationManager host permission recovery', () => {
       error: 'permissionDenied'
     });
   });
+
+  test('message handler returns a useful error for non-Error throws', async () => {
+    const chromeMock = createChromeMock();
+    loadBackgroundModule(chromeMock);
+    await new Promise(resolve => setImmediate(resolve));
+    chromeMock.storage.sync.get.mockRejectedValue('storage unavailable');
+    const handler = chromeMock.runtime.onMessage.addListener.mock.calls[0][0];
+    const sendResponse = jest.fn();
+
+    const keepsChannelOpen = handler({ action: 'markAllAsRead' }, {}, sendResponse);
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(keepsChannelOpen).toBe(true);
+    expect(sendResponse).toHaveBeenCalledWith({
+      success: false,
+      error: 'storage unavailable'
+    });
+  });
 });

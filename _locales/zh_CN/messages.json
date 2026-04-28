@@ -95,14 +95,6 @@
     "message": "开始输入后即可看到预览。",
     "description": "Empty state for the Markdown preview area"
   },
-  "submitReply": {
-    "message": "发送回复",
-    "description": "Button label for submitting an issue reply"
-  },
-  "replySuccess": {
-    "message": "回复已成功发送。",
-    "description": "Success message after posting an issue reply"
-  },
   "replyRequired": {
     "message": "请输入回复内容。",
     "description": "Validation message when issue reply content is empty"
@@ -119,14 +111,6 @@
     "message": "状态",
     "description": "Label for the issue status select field"
   },
-  "updateStatus": {
-    "message": "更新状态",
-    "description": "Button label for issue status updates"
-  },
-  "statusUpdateSuccess": {
-    "message": "状态已更新。",
-    "description": "Success message after updating issue status"
-  },
   "changeAssignee": {
     "message": "更改指派人",
     "description": "Section title for issue assignee updates"
@@ -138,14 +122,6 @@
   "selectAssignee": {
     "message": "选择指派人",
     "description": "Placeholder option for the assignee select field"
-  },
-  "updateAssignee": {
-    "message": "更新指派",
-    "description": "Button label for issue assignee updates"
-  },
-  "assigneeUpdateSuccess": {
-    "message": "指派人已更新。",
-    "description": "Success message after updating issue assignee"
   },
   "assigneeMeta": {
     "message": "指派：$1",
@@ -311,9 +287,9 @@
     "message": "MewMewNotification",
     "description": "Application name in about section"
   },
-  "version": {
-    "message": "版本：1.2.0",
-    "description": "Version information"
+  "versionLabel": {
+    "message": "版本",
+    "description": "Label for manifest version in about section"
   },
   "appDescription": {
     "message": "MewMewNotification - 用于高效接收 Redmine 通知的 Chrome 扩展。",

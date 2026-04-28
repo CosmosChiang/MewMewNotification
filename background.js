@@ -598,25 +598,6 @@ class RedmineAPI {
     });
   }
 
-  async submitIssueReply(issueId, reply) {
-    const sanitizedReply = this.sanitizeIssueNotes(reply);
-    return this.updateIssue(issueId, {
-      notes: sanitizedReply
-    });
-  }
-
-  async updateIssueStatus(issueId, statusId) {
-    return this.updateIssue(issueId, {
-      status_id: this.parsePositiveInteger(statusId, 'status id')
-    });
-  }
-
-  async updateIssueAssignee(issueId, assigneeId) {
-    return this.updateIssue(issueId, {
-      assigned_to_id: this.parsePositiveInteger(assigneeId, 'assignee id')
-    });
-  }
-
   buildIssueUpdateData(changes = {}) {
     if (!changes || typeof changes !== 'object') {
       throw new Error('No issue changes provided');
@@ -1255,18 +1236,6 @@ class NotificationManager {
     }
   }
 
-  async submitIssueReply(issueId, reply) {
-    return this.executeIssueAction(issueId, api => api.submitIssueReply(issueId, reply));
-  }
-
-  async updateIssueStatus(issueId, statusId) {
-    return this.executeIssueAction(issueId, api => api.updateIssueStatus(issueId, statusId));
-  }
-
-  async updateIssueAssignee(issueId, assigneeId) {
-    return this.executeIssueAction(issueId, api => api.updateIssueAssignee(issueId, assigneeId));
-  }
-
   async applyIssueChanges(issueId, changes) {
     return this.executeIssueAction(issueId, api => api.applyIssueChanges(issueId, changes));
   }
@@ -1722,16 +1691,27 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 
 // Message handlers
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  const handleAsyncResponse = (task, errorMapper = error => error.message) => {
+  const getErrorMessage = error => error?.message || String(error);
+
+  const handleAsyncResponse = (task, errorMapper = getErrorMessage) => {
     (async () => {
       try {
         const result = await task();
         sendResponse(result);
       } catch (error) {
         console.error(`Message handler failed for action: ${request.action}`, error);
+        const fallbackErrorMessage = getErrorMessage(error);
+        let mappedErrorMessage;
+
+        try {
+          mappedErrorMessage = errorMapper(error);
+        } catch (mappingError) {
+          mappedErrorMessage = getErrorMessage(mappingError) || fallbackErrorMessage;
+        }
+
         sendResponse({
           success: false,
-          error: errorMapper(error)
+          error: mappedErrorMessage || fallbackErrorMessage
         });
       }
     })();
@@ -1786,24 +1766,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'getIssueActionContext':
       return handleAsyncResponse(
         () => notificationManager.getIssueActionContext(request.issueId),
-        error => notificationManager.resolveIssueActionError(error)
-      );
-
-    case 'submitIssueReply':
-      return handleAsyncResponse(
-        () => notificationManager.submitIssueReply(request.issueId, request.reply),
-        error => notificationManager.resolveIssueActionError(error)
-      );
-
-    case 'updateIssueStatus':
-      return handleAsyncResponse(
-        () => notificationManager.updateIssueStatus(request.issueId, request.statusId),
-        error => notificationManager.resolveIssueActionError(error)
-      );
-
-    case 'updateIssueAssignee':
-      return handleAsyncResponse(
-        () => notificationManager.updateIssueAssignee(request.issueId, request.assigneeId),
         error => notificationManager.resolveIssueActionError(error)
       );
 

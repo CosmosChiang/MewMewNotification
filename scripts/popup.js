@@ -923,9 +923,7 @@ class PopupManager {
         this.syncIssueActionSelections(state);
       }
 
-      if (message.action === 'submitIssueReply') {
-        state.replyText = '';
-      } else if (message.action === 'applyIssueChanges' && message.changes?.reply !== undefined) {
+      if (message.action === 'applyIssueChanges' && message.changes?.reply !== undefined) {
         state.replyText = '';
       }
 
@@ -956,30 +954,6 @@ class PopupManager {
     this.notifications.sort((left, right) => right.updatedOn - left.updatedOn);
   }
 
-  async submitIssueReply(notificationId) {
-    const state = this.getIssueActionState(notificationId);
-    if (!state.replyText.trim()) {
-      state.error = this.translate('replyRequired');
-      this.renderNotifications();
-      return;
-    }
-
-    const notification = this.findNotification(notificationId);
-    if (!notification) {
-      return;
-    }
-
-    await this.executeIssueAction(
-      notificationId,
-      {
-        action: 'submitIssueReply',
-        issueId: notification.issueId,
-        reply: state.replyText.trim()
-      },
-      'replySuccess'
-    );
-  }
-
   async submitIssueChanges(notificationId) {
     const state = this.getIssueActionState(notificationId);
     const notification = this.findNotification(notificationId);
@@ -1002,42 +976,6 @@ class PopupManager {
         changes
       },
       'issueChangesSuccess'
-    );
-  }
-
-  async updateIssueStatus(notificationId) {
-    const state = this.getIssueActionState(notificationId);
-    const notification = this.findNotification(notificationId);
-    if (!notification || !state.statusId) {
-      return;
-    }
-
-    await this.executeIssueAction(
-      notificationId,
-      {
-        action: 'updateIssueStatus',
-        issueId: notification.issueId,
-        statusId: Number.parseInt(state.statusId, 10)
-      },
-      'statusUpdateSuccess'
-    );
-  }
-
-  async updateIssueAssignee(notificationId) {
-    const state = this.getIssueActionState(notificationId);
-    const notification = this.findNotification(notificationId);
-    if (!notification || !state.assigneeId) {
-      return;
-    }
-
-    await this.executeIssueAction(
-      notificationId,
-      {
-        action: 'updateIssueAssignee',
-        issueId: notification.issueId,
-        assigneeId: Number.parseInt(state.assigneeId, 10)
-      },
-      'assigneeUpdateSuccess'
     );
   }
 
