@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <title>MewMewNotification Web Store Screenshots</title>
+  <style>
+    :root {
+      --ink: #202124;
+      --muted: #5f6368;
+      --panel: #ffffff;
+      --line: #dadce0;
+      --blue: #3f51b5;
+      --cyan: #17a2b8;
+      --green: #188038;
+      --red: #b3261e;
+      --amber: #f29900;
+      --soft: #f6f8fc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      width: 1280px;
+      height: 800px;
+      overflow: hidden;
+      font-family: "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", Arial, sans-serif;
+      color: var(--ink);
+      background: #eef2f7;
+    }
+
+    .scene {
+      display: none;
+      width: 1280px;
+      height: 800px;
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(140deg, #f8fbff 0%, #eef2f7 42%, #ffffff 100%);
+    }
+
+    .scene.active {
+      display: block;
+    }
+
+    .stage {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: 500px 1fr;
+      gap: 48px;
+      align-items: center;
+      padding: 56px 72px;
+    }
+
+    .stage.reverse {
+      grid-template-columns: 720px 1fr;
+      gap: 36px;
+      padding-left: 48px;
+      padding-right: 48px;
+    }
+
+    .stage.reverse .options {
+      width: 720px;
+    }
+
+    .stage.reverse h1 {
+      font-size: 46px;
+    }
+
+    .stage.reverse .lead {
+      max-width: 420px;
+      font-size: 20px;
+    }
+
+    .copy {
+      display: grid;
+      gap: 22px;
+      align-content: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 22px;
+      font-weight: 700;
+      color: #30336f;
+    }
+
+    .brand img {
+      width: 52px;
+      height: 52px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 56px;
+      line-height: 1.08;
+      letter-spacing: 0;
+      color: #202124;
+    }
+
+    .lead {
+      margin: 0;
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1.55;
+      max-width: 520px;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid #d8dff0;
+      color: #334155;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .browser {
+      width: 720px;
+      height: 610px;
+      background: #fff;
+      border: 1px solid #d9dde7;
+      box-shadow: 0 24px 70px rgba(36, 48, 77, 0.18);
+      overflow: hidden;
+    }
+
+    .browser-bar {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      background: #f1f3f4;
+      border-bottom: 1px solid #d9dde7;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #d0d5dd;
+    }
+
+    .address {
+      margin-left: 8px;
+      height: 26px;
+      flex: 1;
+      border-radius: 14px;
+      background: #fff;
+      color: #667085;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+    }
+
+    .popup {
+      width: 380px;
+      height: 560px;
+      margin: 24px auto;
+      background: #f5f5f5;
+      border: 1px solid #cfd4dc;
+      box-shadow: 0 18px 45px rgba(38, 45, 67, 0.22);
+      overflow: hidden;
+    }
+
+    .popup-header,
+    .options-title {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .popup-header {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+    }
+
+    .popup-header strong {
+      font-size: 16px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 7px;
+    }
+
+    .icon-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 0;
+      background: rgba(255, 255, 255, 0.23);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .popup-content {
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .notification {
+      background: white;
+      border-left: 4px solid #667eea;
+      padding: 12px;
+      box-shadow: 0 2px 7px rgba(15, 23, 42, 0.12);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .notification.updated {
+      border-left-color: var(--amber);
+      background: #fff8e1;
+    }
+
+    .notification.read {
+      opacity: 0.72;
+      border-left-color: #b8bdc7;
+    }
+
+    .notif-title {
+      margin: 0 0 6px;
+      font-size: 14px;
+      line-height: 1.3;
+      font-weight: 700;
+    }
+
+    .meta {
+      display: flex;
+      gap: 9px;
+      flex-wrap: wrap;
+      color: #667085;
+      font-size: 12px;
+    }
+
+    .badge {
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    .notif-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .tiny {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 0;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .tiny.more {
+      background: #667eea;
+    }
+
+    .tiny.done {
+      background: #28a745;
+    }
+
+    .advanced {
+      grid-column: 1 / -1;
+      border-top: 1px solid #e4e7ec;
+      padding-top: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .field-label {
+      font-size: 12px;
+      color: #344054;
+      font-weight: 700;
+    }
+
+    .textarea,
+    .select,
+    .input {
+      border: 1px solid #cfd4dc;
+      background: white;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: #344054;
+      width: 100%;
+    }
+
+    .textarea {
+      height: 78px;
+      line-height: 1.5;
+    }
+
+    .preview {
+      background: #f8fafc;
+      border: 1px solid #e4e7ec;
+      padding: 9px 10px;
+      color: #334155;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .primary {
+      background: #667eea;
+      color: #fff;
+      border: 0;
+      height: 36px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .options {
+      width: 760px;
+      height: 610px;
+      background: white;
+      border: 1px solid #d9dde7;
+      box-shadow: 0 24px 70px rgba(36, 48, 77, 0.18);
+      overflow: hidden;
+    }
+
+    .options-title {
+      height: 82px;
+      padding: 22px 32px;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .tabs {
+      height: 56px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      background: #f8f9fa;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .tab {
+      display: grid;
+      place-items: center;
+      color: #5f6368;
+      font-weight: 700;
+      font-size: 15px;
+      border-bottom: 3px solid transparent;
+    }
+
+    .tab.active {
+      color: #667eea;
+      background: #fff;
+      border-bottom-color: #667eea;
+    }
+
+    .options-body {
+      padding: 28px 32px;
+    }
+
+    .options-body h2 {
+      margin: 0 0 22px;
+      font-size: 24px;
+      color: #202124;
+    }
+
+    .form {
+      display: grid;
+      gap: 18px;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 8px;
+    }
+
+    .form-row label {
+      font-weight: 700;
+      color: #303134;
+      font-size: 15px;
+    }
+
+    .help {
+      color: #667085;
+      font-size: 13px;
+    }
+
+    .button-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding-top: 8px;
+      border-top: 1px solid #eef0f3;
+    }
+
+    .btn {
+      height: 42px;
+      padding: 0 18px;
+      border: 0;
+      color: white;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .btn.info {
+      background: var(--cyan);
+    }
+
+    .btn.save {
+      background: #28a745;
+    }
+
+    .status {
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      border: 1px solid;
+    }
+
+    .status.success {
+      background: #e6f4ea;
+      color: #137333;
+      border-color: #b7dfc1;
+    }
+
+    .status.warning {
+      background: #fce8e6;
+      color: #b3261e;
+      border-color: #f5c6cb;
+    }
+
+    .check-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 22px;
+      margin: 12px 0 6px;
+    }
+
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      color: #344054;
+    }
+
+    .box {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #667eea;
+      background: #667eea;
+      color: white;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .select-line {
+      height: 44px;
+      border: 2px solid #e9ecef;
+      padding: 9px 12px;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: white;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 14px;
+    }
+
+    .feature-card {
+      background: #fff;
+      border: 1px solid #d8dff0;
+      padding: 18px;
+      box-shadow: 0 10px 24px rgba(36, 48, 77, 0.08);
+    }
+
+    .feature-card strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 17px;
+      color: #202124;
+    }
+
+    .feature-card span {
+      color: #667085;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .phone-stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .toast {
+      background: #fff;
+      border: 1px solid #d9dde7;
+      box-shadow: 0 16px 36px rgba(36, 48, 77, 0.16);
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 12px;
+      align-items: start;
+      width: 430px;
+    }
+
+    .toast img {
+      width: 54px;
+      height: 54px;
+    }
+
+    .toast h3 {
+      margin: 0 0 5px;
+      font-size: 17px;
+    }
+
+    .toast p {
+      margin: 0;
+      color: #667085;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 10px;
+    }
+
+    .stat {
+      background: #fff;
+      border: 1px solid #d8dff0;
+      padding: 18px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 30px;
+      color: #30336f;
+      margin-bottom: 4px;
+    }
+
+    .stat span {
+      color: #667085;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .mini-browser {
+      display: grid;
+      gap: 14px;
+      width: 530px;
+    }
+  </style>
+</head>
+<body>
+  <section id="scene-1" class="scene">
+    <div class="stage">
+      <div class="copy">
+        <div class="brand"><img src="../../../icons/icon128.png" alt="">MewMewNotification</div>
+        <h1>Redmine 更新即時掌握</h1>
+        <p class="lead">在 Chrome 工具列快速查看指派與關注中的 issue，桌面通知與徽章計數讓重要更新不漏接。</p>
+        <div class="chips">
+          <span class="chip">即時通知</span>
+          <span class="chip">未讀徽章</span>
+          <span class="chip">一鍵開啟 issue</span>
+        </div>
+      </div>
+      <div class="browser">
+        <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><div class="address">chrome-extension://mewmewnotification/popup.html</div></div>
+        <div class="popup">
+          <div class="popup-header">
+            <strong>MewMewNotification</strong>
+            <div class="header-actions"><span class="icon-btn">↻</span><span class="icon-btn">⌫</span><span class="icon-btn">✓</span><span class="icon-btn">⚙</span></div>
+          </div>
+          <div class="popup-content">
+            <div class="notification updated">
+              <div><p class="notif-title"><span class="badge">●</span>#4821 API timeout handling updated</p><div class="meta"><span>Project: Portal</span><span>Assignee: You</span><span>2 min ago</span></div></div>
+              <div class="notif-actions"><span class="tiny more">⋯</span><span class="tiny done">✓</span></div>
+            </div>
+            <div class="notification">
+              <div><p class="notif-title"><span class="badge">◆</span>#4817 Login page copy review</p><div class="meta"><span>Watched</span><span>Status: Feedback</span><span>12 min ago</span></div></div>
+              <div class="notif-actions"><span class="tiny more">⋯</span><span class="tiny done">✓</span></div>
+            </div>
+            <div class="notification">
+              <div><p class="notif-title"><span class="badge">●</span>#4809 Release checklist approval</p><div class="meta"><span>Assigned</span><span>Priority: High</span><span>38 min ago</span></div></div>
+              <div class="notif-actions"><span class="tiny more">⋯</span><span class="tiny done">✓</span></div>
+            </div>
+            <div class="notification read">
+              <div><p class="notif-title">#4798 Translation update completed</p><div class="meta"><span>Read</span><span>Yesterday</span></div></div>
+              <div class="notif-actions"><span class="tiny more">⋯</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="scene-2" class="scene">
+    <div class="stage reverse">
+      <div class="options">
+        <div class="options-title">Settings</div>
+        <div class="tabs"><div class="tab active">Redmine</div><div class="tab">Notifications</div><div class="tab">Language</div><div class="tab">About</div></div>
+        <div class="options-body">
+          <h2>Redmine Configuration</h2>
+          <div class="form">
+            <div class="form-row"><label>Redmine URL</label><div class="input">https://redmine.example.com</div><span class="help">Only the configured Redmine origin is requested when needed.</span></div>
+            <div class="form-row"><label>API Key</label><div class="input">••••••••••••••••••••••••</div><span class="help">Stored locally in extension storage, not synchronized across devices.</span></div>
+            <div class="button-row"><button class="btn info">Test Connection</button><button class="btn save">Save Redmine Settings</button></div>
+            <div class="status success">Connection successful. Host permission granted for this Redmine server.</div>
+          </div>
+        </div>
+      </div>
+      <div class="copy">
+        <div class="brand"><img src="../../../icons/icon128.png" alt="">MewMewNotification</div>
+        <h1>安全連線與本機憑證儲存</h1>
+        <p class="lead">支援 HTTPS 檢查、每站點主機權限與 API key 本機儲存，降低擴充功能權限與憑證外洩風險。</p>
+        <div class="chips">
+          <span class="chip">HTTPS 優先</span>
+          <span class="chip">最小權限</span>
+          <span class="chip">本機 API key</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="scene-3" class="scene">
+    <div class="stage">
+      <div class="copy">
+        <div class="brand"><img src="../../../icons/icon128.png" alt="">MewMewNotification</div>
+        <h1>直接在通知卡片處理 issue</h1>
+        <p class="lead">展開更多操作即可快速回覆、變更狀態、改派負責人，並支援輕量 Markdown 預覽。</p>
+        <div class="chips">
+          <span class="chip">快速回覆</span>
+          <span class="chip">狀態變更</span>
+          <span class="chip">Markdown 預覽</span>
+        </div>
+      </div>
+      <div class="browser">
+        <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><div class="address">popup.html · Advanced actions</div></div>
+        <div class="popup">
+          <div class="popup-header"><strong>MewMewNotification</strong><div class="header-actions"><span class="icon-btn">↻</span><span class="icon-btn">✓</span><span class="icon-btn">⚙</span></div></div>
+          <div class="popup-content">
+            <div class="notification updated">
+              <div><p class="notif-title">#4821 API timeout handling updated</p><div class="meta"><span>Assigned</span><span>Priority: High</span></div></div>
+              <div class="notif-actions"><span class="tiny more">⋯</span><span class="tiny done">✓</span></div>
+              <div class="advanced">
+                <div class="field-label">Quick reply</div>
+                <div class="textarea">已確認 timeout case，下一版會補上 retry guard 與錯誤提示。</div>
+                <div class="field-label">Markdown preview</div>
+                <div class="preview"><strong>已確認</strong> timeout case<br>下一版會補上 <code>retry guard</code>。</div>
+                <div class="field-label">Status</div>
+                <div class="select">In Progress</div>
+                <div class="field-label">Assignee</div>
+                <div class="select">Cosmos Chiang</div>
+                <button class="primary">Submit issue updates</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="scene-4" class="scene">
+    <div class="stage reverse">
+      <div class="options">
+        <div class="options-title">Settings</div>
+        <div class="tabs"><div class="tab">Redmine</div><div class="tab active">Notifications</div><div class="tab">Language</div><div class="tab">About</div></div>
+        <div class="options-body">
+          <h2>Notification Settings</h2>
+          <div class="form">
+            <div class="form-row"><label>Check Interval</label><div class="select-line">5 minutes <span>⌄</span></div></div>
+            <div class="check-grid">
+              <div class="check"><span class="box">✓</span>Enable desktop notifications</div>
+              <div class="check"><span class="box">✓</span>Enable notification sound</div>
+              <div class="check"><span class="box">✓</span>Only show issues assigned to me</div>
+              <div class="check"><span class="box">✓</span>Include issues I'm watching</div>
+            </div>
+            <div class="form-row"><label>Maximum notifications</label><div class="select-line">50 <span>⌄</span></div></div>
+            <div class="button-row"><span></span><button class="btn save">Save Notification Settings</button></div>
+            <div class="status success">Notification preferences saved.</div>
+          </div>
+        </div>
+      </div>
+      <div class="copy">
+        <div class="brand"><img src="../../../icons/icon128.png" alt="">MewMewNotification</div>
+        <h1>通知節奏由你掌控</h1>
+        <p class="lead">自訂檢查間隔、通知數量、音效與專案篩選，只留下真正需要立即處理的 Redmine 更新。</p>
+        <div class="stat-row">
+          <div class="stat"><strong>1-60</strong><span>分鐘檢查間隔</span></div>
+          <div class="stat"><strong>50</strong><span>預設最大通知</span></div>
+          <div class="stat"><strong>4</strong><span>介面語言</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="scene-5" class="scene">
+    <div class="stage">
+      <div class="copy">
+        <div class="brand"><img src="../../../icons/icon128.png" alt="">MewMewNotification</div>
+        <h1>多語系團隊也能順手使用</h1>
+        <p class="lead">內建 English、繁體中文、簡體中文、日本語，適合跨區團隊共同追蹤 Redmine 工作流。</p>
+        <div class="cards">
+          <div class="feature-card"><strong>English</strong><span>Clear labels for global engineering teams.</span></div>
+          <div class="feature-card"><strong>繁體中文</strong><span>適合台灣團隊的操作文字。</span></div>
+          <div class="feature-card"><strong>简体中文</strong><span>支援中文環境快速上手。</span></div>
+          <div class="feature-card"><strong>日本語</strong><span>日本語介面で通知を確認。</span></div>
+        </div>
+      </div>
+      <div class="mini-browser">
+        <div class="toast"><img src="../../../icons/icon128.png" alt=""><div><h3>MewMewNotification</h3><p>#4821 has a new comment from Redmine. Click to open the issue directly.</p></div></div>
+        <div class="toast"><img src="../../../icons/icon128.png" alt=""><div><h3>通知已更新</h3><p>指派給你的 issue 有新回覆，可從 popup 直接標記已讀或快速處理。</p></div></div>
+        <div class="options" style="width: 530px; height: 310px;">
+          <div class="options-title" style="height: 72px; font-size: 25px;">Settings</div>
+          <div class="tabs"><div class="tab">Redmine</div><div class="tab">Notifications</div><div class="tab active">Language</div><div class="tab">About</div></div>
+          <div class="options-body" style="padding: 24px;">
+            <h2 style="font-size: 22px; margin-bottom: 18px;">Language Settings</h2>
+            <div class="form-row"><label>Select Language</label><div class="select-line">繁體中文 <span>⌄</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const scene = params.get("scene") || "1";
+    const activeScene = document.getElementById(`scene-${scene}`);
+    activeScene?.classList.add("active");
+
+    const englishScenes = {
+      "1": {
+        h1: "Redmine updates at a glance",
+        lead: "Check assigned and watched issues from the Chrome toolbar. Desktop alerts and badge counts keep important updates visible.",
+        chips: ["Real-time alerts", "Unread badge", "Open issue in one click"]
+      },
+      "2": {
+        h1: "Secure connection and local credentials",
+        lead: "HTTPS checks, per-site host permissions, and local API key storage help reduce extension permission and credential risk.",
+        chips: ["HTTPS first", "Least privilege", "Local API key"]
+      },
+      "3": {
+        h1: "Handle issues from notification cards",
+        lead: "Expand advanced actions to reply, change status, reassign issues, and preview lightweight Markdown without leaving the popup.",
+        chips: ["Quick reply", "Status update", "Markdown preview"],
+        textarea: "Confirmed the timeout case. The next version will add a retry guard and clearer error message.",
+        preview: "<strong>Confirmed</strong> the timeout case<br>The next version will add <code>retry guard</code>."
+      },
+      "4": {
+        h1: "Tune notifications to your workflow",
+        lead: "Customize check intervals, notification limits, sound, and project filters so only actionable Redmine updates stay in view.",
+        stats: ["minute check interval", "default max notifications", "interface languages"]
+      },
+      "5": {
+        h1: "Built for multilingual teams",
+        lead: "English, Traditional Chinese, Simplified Chinese, and Japanese are built in for teams working across regions.",
+        cards: [
+          ["English", "Clear labels for global engineering teams."],
+          ["Traditional Chinese", "Localized wording for Taiwan-based teams."],
+          ["Simplified Chinese", "Fast onboarding for Chinese work environments."],
+          ["Japanese", "Review Redmine notifications in Japanese."]
+        ],
+        toastTitle: "Notification updated",
+        toastText: "An assigned issue has a new reply. Mark it as read or handle it from the popup.",
+        language: "English"
+      }
+    };
+
+    if (params.get("variant") === "en" && activeScene) {
+      const data = englishScenes[scene];
+      if (data) {
+        const title = activeScene.querySelector(".copy h1");
+        const lead = activeScene.querySelector(".copy .lead");
+        if (title) title.textContent = data.h1;
+        if (lead) lead.textContent = data.lead;
+
+        if (data.chips) {
+          activeScene.querySelectorAll(".copy .chip").forEach((chip, index) => {
+            chip.textContent = data.chips[index] || chip.textContent;
+          });
+        }
+
+        if (data.textarea) {
+          const textarea = activeScene.querySelector(".textarea");
+          const preview = activeScene.querySelector(".preview");
+          if (textarea) textarea.textContent = data.textarea;
+          if (preview) preview.innerHTML = data.preview;
+        }
+
+        if (data.stats) {
+          activeScene.querySelectorAll(".stat span").forEach((stat, index) => {
+            stat.textContent = data.stats[index] || stat.textContent;
+          });
+        }
+
+        if (data.cards) {
+          activeScene.querySelectorAll(".feature-card").forEach((card, index) => {
+            const item = data.cards[index];
+            if (item) {
+              card.querySelector("strong").textContent = item[0];
+              card.querySelector("span").textContent = item[1];
+            }
+          });
+          const toasts = activeScene.querySelectorAll(".toast");
+          if (toasts[1]) {
+            toasts[1].querySelector("h3").textContent = data.toastTitle;
+            toasts[1].querySelector("p").textContent = data.toastText;
+          }
+          const languageSelect = activeScene.querySelector(".options .select-line");
+          if (languageSelect) languageSelect.firstChild.textContent = data.language + " ";
+        }
+      }
+    }
+  </script>
+</body>
+</html>

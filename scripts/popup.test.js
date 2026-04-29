@@ -81,7 +81,7 @@ describe('PopupManager', () => {
       markAllReadBtn: createMockElement(),
       settingsBtn: createMockElement(),
       retryBtn: createMockElement(),
-      clearAllBtn: createMockElement()
+      clearHistoryBtn: createMockElement()
     };
 
     global.window = { close: jest.fn() };
@@ -128,7 +128,7 @@ describe('PopupManager', () => {
     expect(manager.sanitizeAttribute(15)).toBe('15');
   });
 
-  test('loads notifications, keeps unread items, and triggers rendering', async () => {
+  test('loads notifications, keeps retained items, and triggers rendering', async () => {
     manager.throttledRender = jest.fn();
     global.chrome.runtime.sendMessage.mockResolvedValue({
       success: true,
@@ -147,10 +147,16 @@ describe('PopupManager', () => {
     );
     expect(manager.notifications).toEqual([
       expect.objectContaining({ id: 1, read: false }),
+      expect.objectContaining({ id: 2, read: true }),
       expect.objectContaining({ id: 3, read: false })
     ]);
     expect(manager.notifications[0].updatedOn).toBeInstanceOf(Date);
     expect(manager.notifications[1].updatedOn).toBeInstanceOf(Date);
+    expect(manager.notifications[2].updatedOn).toBeInstanceOf(Date);
+    expect(manager.getVisibleNotifications()).toEqual([
+      expect.objectContaining({ id: 1, read: false }),
+      expect.objectContaining({ id: 3, read: false })
+    ]);
     expect(manager.throttledRender).toHaveBeenCalled();
     expect(elements.loadingIndicator.style.display).toBe('flex');
   });
@@ -181,8 +187,103 @@ describe('PopupManager', () => {
       },
       expect.any(Function)
     );
-    expect(manager.notifications).toEqual([{ id: 2, read: false }]);
+    expect(manager.notifications).toEqual([
+      { id: 1, read: true },
+      { id: 2, read: false }
+    ]);
+    expect(manager.getVisibleNotifications()).toEqual([{ id: 2, read: false }]);
     expect(manager.renderNotifications).toHaveBeenCalled();
+  });
+
+  test('filters retained notifications by inbox view and search query', () => {
+    manager.notifications = [
+      {
+        id: 'issue_10',
+        issueId: 10,
+        title: '#10: Login bug',
+        project: 'Portal',
+        assigneeName: 'Alice',
+        read: false,
+        updatedOn: new Date('2026-04-29T08:00:00.000Z')
+      },
+      {
+        id: 'issue_11',
+        issueId: 11,
+        title: '#11: Billing export',
+        project: 'Finance',
+        assigneeName: 'Bob',
+        read: true,
+        updatedOn: new Date('2026-04-28T08:00:00.000Z')
+      }
+    ];
+
+    expect(manager.getVisibleNotifications()).toEqual([
+      expect.objectContaining({ id: 'issue_10' })
+    ]);
+
+    manager.activeInboxView = 'read';
+    expect(manager.getVisibleNotifications()).toEqual([
+      expect.objectContaining({ id: 'issue_11' })
+    ]);
+
+    manager.activeInboxView = 'all';
+    manager.searchQuery = 'finance';
+    expect(manager.getVisibleNotifications()).toEqual([
+      expect.objectContaining({ id: 'issue_11' })
+    ]);
+
+    manager.searchQuery = '10';
+    expect(manager.getVisibleNotifications()).toEqual([
+      expect.objectContaining({ id: 'issue_10' })
+    ]);
+  });
+
+  test('uses view-specific empty state messages', () => {
+    manager.searchQuery = 'missing';
+    expect(manager.getEmptyStateMessage()).toBe('noMatchingNotifications');
+
+    manager.searchQuery = '';
+    manager.activeInboxView = 'read';
+    expect(manager.getEmptyStateMessage()).toBe('noReadNotifications');
+
+    manager.activeInboxView = 'all';
+    expect(manager.getEmptyStateMessage()).toBe('noNotificationHistory');
+
+    manager.activeInboxView = 'unread';
+    expect(manager.getEmptyStateMessage()).toBe('noNotifications');
+  });
+
+  test('renders change digest rows for notification updates', () => {
+    const appendedRows = [];
+    const container = createMockElement({
+      appendChild: jest.fn(row => appendedRows.push(row))
+    });
+    const createdElements = [];
+    global.document.createElement.mockImplementation(() => {
+      const element = createMockElement({
+        appendChild: jest.fn(child => {
+          element.children.push(child);
+        }),
+        children: []
+      });
+      createdElements.push(element);
+      return element;
+    });
+
+    manager.translate = jest.fn((key, substitutions = []) => (
+      substitutions.length > 0 ? `${substitutions[0]} -> ${substitutions[1]}` : key
+    ));
+
+    manager.renderChangeSummary({
+      changeSummary: [
+        { field: 'status', from: 'New', to: 'In Progress' }
+      ]
+    }, container);
+
+    expect(appendedRows).toHaveLength(1);
+    expect(appendedRows[0].className).toBe('change-summary-row');
+    expect(createdElements.some(element => element.textContent === 'changeField_status')).toBe(true);
+    expect(createdElements.some(element => element.textContent === 'New -> In Progress')).toBe(true);
   });
 
   test('falls back to a regular refresh when force refresh fails', async () => {

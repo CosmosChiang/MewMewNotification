@@ -312,7 +312,7 @@
     "description": "Feature 3 description"
   },
   "feature4": {
-    "message": "Clear all notifications",
+    "message": "Clear notification history",
     "description": "Feature 4 description"
   },
   "feature5": {
@@ -414,18 +414,6 @@
   "refreshNotifications": {
     "message": "Refresh notifications",
     "description": "Refresh notifications button tooltip"
-  },
-  "clearAllNotifications": {
-    "message": "Clear all notifications",
-    "description": "Clear all notifications button tooltip"
-  },
-  "clearAllConfirmation": {
-    "message": "Are you sure you want to clear all notifications? This action cannot be undone.",
-    "description": "Clear all notifications confirmation message"
-  },
-  "clearAllError": {
-    "message": "Failed to clear notifications. Please try again later.",
-    "description": "Clear all notifications error message"
   },
   "urlRequired": {
     "message": "Redmine URL is required",
@@ -554,5 +542,69 @@
   "clickToViewAll": {
     "message": "Click to view all",
     "description": "Context message for batch notifications"
+  },
+  "inboxUnread": {
+    "message": "Unread",
+    "description": "Inbox tab for unread notifications"
+  },
+  "inboxRead": {
+    "message": "Read",
+    "description": "Inbox tab for read notifications"
+  },
+  "inboxAll": {
+    "message": "All",
+    "description": "Inbox tab for all retained notifications"
+  },
+  "searchNotifications": {
+    "message": "Search notifications",
+    "description": "Search field placeholder for notification inbox"
+  },
+  "noReadNotifications": {
+    "message": "No read notifications",
+    "description": "Empty state for read inbox view"
+  },
+  "noNotificationHistory": {
+    "message": "No notification history",
+    "description": "Empty state for all retained notification history"
+  },
+  "noMatchingNotifications": {
+    "message": "No matching notifications",
+    "description": "Empty state when inbox search has no results"
+  },
+  "clearNotificationHistory": {
+    "message": "Clear history",
+    "description": "Button label for clearing retained notification history"
+  },
+  "clearHistoryConfirmation": {
+    "message": "Are you sure you want to clear all notification history? This action cannot be undone.",
+    "description": "Confirmation message for clearing retained notification history"
+  },
+  "clearHistoryError": {
+    "message": "Failed to clear notification history. Please try again later.",
+    "description": "Error message when clearing retained notification history fails"
+  },
+  "issueUpdatedWithoutDetails": {
+    "message": "Issue updated; detailed changes are unavailable",
+    "description": "Generic update digest when field-level changes are unavailable"
+  },
+  "changedFromTo": {
+    "message": "$1 → $2",
+    "description": "Change digest value showing old and new values"
+  },
+  "changeField_subject": {
+    "message": "Subject",
+    "description": "Change digest field label for subject"
+  },
+  "changeField_status": {
+    "message": "Status",
+    "description": "Change digest field label for status"
+  },
+  "changeField_priority": {
+    "message": "Priority",
+    "description": "Change digest field label for priority"
+  },
+  "changeField_assignee": {
+    "message": "Assignee",
+    "description": "Change digest field label for assignee"
   }
 }

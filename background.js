@@ -3,6 +3,8 @@ if (typeof importScripts === 'function') {
 }
 
 const HOST_PERMISSION_RECOVERY_NOTIFICATION_ID = 'host-permission-recovery';
+const NOTIFICATION_HISTORY_STORAGE_KEY = 'notificationHistory';
+const MAX_NOTIFICATION_HISTORY_ITEMS = 100;
 
 class RedmineAPI {
   constructor(baseUrl, apiKey) {
@@ -763,6 +765,8 @@ class RedmineAPI {
 class NotificationManager {
   constructor() {
     this.notifications = new Map();
+    this.notificationHistoryStorageKey = NOTIFICATION_HISTORY_STORAGE_KEY;
+    this.notificationHistoryLimit = MAX_NOTIFICATION_HISTORY_ITEMS;
     this.settings = this.getDefaultSettings();
     this.settingsLoaded = false;
     this.settingsLoadPromise = undefined;
@@ -836,6 +840,143 @@ class NotificationManager {
     return configManagerClass?.normalizeStorageResult
       ? configManagerClass.normalizeStorageResult(result)
       : (result && typeof result === 'object' ? result : {});
+  }
+
+  parseHistoryDate(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? new Date(0) : date;
+  }
+
+  normalizeChangeSummary(changeSummary) {
+    if (!Array.isArray(changeSummary)) {
+      return [];
+    }
+
+    return changeSummary
+      .filter(item => item && typeof item === 'object' && typeof item.field === 'string')
+      .map(item => ({
+        field: item.field,
+        from: item.from === undefined || item.from === null ? '' : String(item.from),
+        to: item.to === undefined || item.to === null ? '' : String(item.to)
+      }));
+  }
+
+  normalizeIssueSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') {
+      return undefined;
+    }
+
+    return {
+      subject: typeof snapshot.subject === 'string' ? snapshot.subject : '',
+      status: typeof snapshot.status === 'string' ? snapshot.status : '',
+      priority: typeof snapshot.priority === 'string' ? snapshot.priority : '',
+      assigneeId: Number.isInteger(snapshot.assigneeId) ? snapshot.assigneeId : undefined,
+      assigneeName: typeof snapshot.assigneeName === 'string' ? snapshot.assigneeName : '',
+      updatedOn: Number.isFinite(snapshot.updatedOn) ? snapshot.updatedOn : 0
+    };
+  }
+
+  normalizeNotificationHistoryRecord(record) {
+    if (!record || typeof record !== 'object') {
+      return undefined;
+    }
+
+    const id = typeof record.id === 'string' ? record.id : '';
+    if (!id) {
+      return undefined;
+    }
+
+    const updatedOn = this.parseHistoryDate(record.updatedOn);
+
+    return {
+      id,
+      issueId: Number.isInteger(record.issueId) ? record.issueId : undefined,
+      title: typeof record.title === 'string' ? record.title : '',
+      project: typeof record.project === 'string' ? record.project : '',
+      author: typeof record.author === 'string' ? record.author : '',
+      status: typeof record.status === 'string' ? record.status : '',
+      priority: typeof record.priority === 'string' ? record.priority : '',
+      assigneeId: Number.isInteger(record.assigneeId) ? record.assigneeId : undefined,
+      assigneeName: typeof record.assigneeName === 'string' ? record.assigneeName : '',
+      projectId: Number.isInteger(record.projectId) ? record.projectId : undefined,
+      updatedOn,
+      url: typeof record.url === 'string' ? record.url : '',
+      read: record.read === true,
+      isUpdated: record.isUpdated === true,
+      sourceType: typeof record.sourceType === 'string' ? record.sourceType : 'unknown',
+      changeSummary: this.normalizeChangeSummary(record.changeSummary),
+      lastSeenState: this.normalizeIssueSnapshot(record.lastSeenState)
+    };
+  }
+
+  serializeNotificationHistoryRecord(record) {
+    const normalizedRecord = this.normalizeNotificationHistoryRecord(record);
+    if (!normalizedRecord) {
+      return undefined;
+    }
+
+    return {
+      ...normalizedRecord,
+      updatedOn: normalizedRecord.updatedOn.toISOString()
+    };
+  }
+
+  applyNotificationHistoryRetention(records) {
+    return records
+      .map(record => this.normalizeNotificationHistoryRecord(record))
+      .filter(Boolean)
+      .sort((left, right) => right.updatedOn - left.updatedOn)
+      .slice(0, this.notificationHistoryLimit);
+  }
+
+  async loadNotificationHistory() {
+    const result = this.normalizeStorageResult(
+      await chrome.storage.local.get([this.notificationHistoryStorageKey])
+    );
+    const history = Array.isArray(result[this.notificationHistoryStorageKey])
+      ? result[this.notificationHistoryStorageKey]
+      : [];
+
+    return this.applyNotificationHistoryRetention(history);
+  }
+
+  async saveNotificationHistory(history) {
+    const retainedHistory = this.applyNotificationHistoryRetention(history);
+    const serializedHistory = retainedHistory
+      .map(record => this.serializeNotificationHistoryRecord(record))
+      .filter(Boolean);
+
+    await chrome.storage.local.set({
+      [this.notificationHistoryStorageKey]: serializedHistory
+    });
+
+    return retainedHistory;
+  }
+
+  async mergeNotificationHistory(notifications, { readNotificationIds = [] } = {}) {
+    const existingHistory = await this.loadNotificationHistory();
+    const historyById = new Map(existingHistory.map(record => [record.id, record]));
+    const readNotificationSet = new Set(Array.isArray(readNotificationIds) ? readNotificationIds : []);
+
+    (Array.isArray(notifications) ? notifications : []).forEach(notification => {
+      const normalizedNotification = this.normalizeNotificationHistoryRecord(notification);
+      if (!normalizedNotification) {
+        return;
+      }
+
+      const existingRecord = historyById.get(normalizedNotification.id);
+      const reconciledReadState = normalizedNotification.isUpdated
+        ? normalizedNotification.read
+        : normalizedNotification.read || existingRecord?.read === true || readNotificationSet.has(normalizedNotification.id);
+
+      historyById.set(normalizedNotification.id, {
+        ...existingRecord,
+        ...normalizedNotification,
+        read: reconciledReadState
+      });
+    });
+
+    return this.saveNotificationHistory(Array.from(historyById.values()));
   }
 
   async loadSettings({ notifyPermissionRecovery = false } = {}) {
@@ -1110,6 +1251,8 @@ class NotificationManager {
   }
 
   buildNotificationFromIssue(issue, existingNotification = {}) {
+    const lastSeenState = existingNotification.lastSeenState || this.buildIssueSnapshot(issue);
+
     return {
       id: `issue_${issue.id}`,
       issueId: issue.id,
@@ -1125,8 +1268,60 @@ class NotificationManager {
       url: `${this.settings.redmineUrl}/issues/${issue.id}`,
       read: existingNotification.read === true,
       isUpdated: existingNotification.isUpdated === true,
-      sourceType: issue.sourceType || existingNotification.sourceType || 'unknown'
+      sourceType: issue.sourceType || existingNotification.sourceType || 'unknown',
+      changeSummary: this.normalizeChangeSummary(existingNotification.changeSummary),
+      lastSeenState
     };
+  }
+
+  buildIssueSnapshot(issue) {
+    return {
+      subject: typeof issue?.subject === 'string' ? issue.subject : '',
+      status: typeof issue?.status?.name === 'string' ? issue.status.name : '',
+      priority: typeof issue?.priority?.name === 'string' ? issue.priority.name : '',
+      assigneeId: Number.isInteger(issue?.assigned_to?.id) ? issue.assigned_to.id : undefined,
+      assigneeName: typeof issue?.assigned_to?.name === 'string' ? issue.assigned_to.name : '',
+      updatedOn: new Date(issue?.updated_on).getTime()
+    };
+  }
+
+  buildIssueChangeSummary(previousState, currentState) {
+    const previousSnapshot = this.normalizeIssueSnapshot(previousState);
+    const currentSnapshot = this.normalizeIssueSnapshot(currentState);
+
+    if (!previousSnapshot || !currentSnapshot) {
+      return [];
+    }
+
+    const changes = [];
+    const compareTextField = (field, fromValue, toValue) => {
+      const normalizedFrom = fromValue || '';
+      const normalizedTo = toValue || '';
+      if (normalizedFrom !== normalizedTo) {
+        changes.push({
+          field,
+          from: normalizedFrom,
+          to: normalizedTo
+        });
+      }
+    };
+
+    compareTextField('subject', previousSnapshot.subject, currentSnapshot.subject);
+    compareTextField('status', previousSnapshot.status, currentSnapshot.status);
+    compareTextField('priority', previousSnapshot.priority, currentSnapshot.priority);
+
+    if (
+      previousSnapshot.assigneeId !== currentSnapshot.assigneeId ||
+      previousSnapshot.assigneeName !== currentSnapshot.assigneeName
+    ) {
+      changes.push({
+        field: 'assignee',
+        from: previousSnapshot.assigneeName,
+        to: currentSnapshot.assigneeName
+      });
+    }
+
+    return changes;
   }
 
   async persistIssueState(issue) {
@@ -1135,11 +1330,7 @@ class NotificationManager {
     );
     const issueStates = result.issueStates || {};
 
-    issueStates[issue.id] = {
-      updatedOn: new Date(issue.updated_on).getTime(),
-      status: issue.status?.name,
-      subject: issue.subject
-    };
+    issueStates[issue.id] = this.buildIssueSnapshot(issue);
 
     await chrome.storage.local.set({ issueStates });
   }
@@ -1154,8 +1345,11 @@ class NotificationManager {
 
     this.notifications.set(notificationId, syncedNotification);
     await this.persistIssueState(issue);
+    const retainedHistory = await this.mergeNotificationHistory([syncedNotification], {
+      readNotificationIds: this.settings.readNotifications
+    });
 
-    const unreadCount = Array.from(this.notifications.values())
+    const unreadCount = retainedHistory
       .filter(notification => !notification.read)
       .length;
     this.updateBadge(unreadCount);
@@ -1303,6 +1497,8 @@ class NotificationManager {
         await chrome.storage.local.get(['issueStates'])
       );
       const previousIssueStates = result.issueStates || {};
+      const existingHistory = await this.loadNotificationHistory();
+      const existingHistoryById = new Map(existingHistory.map(record => [record.id, record]));
 
       console.log('Previous issue states count:', Object.keys(previousIssueStates).length);
       console.log('Current issues count:', issues.length);
@@ -1316,14 +1512,20 @@ class NotificationManager {
       
       for (const issue of issues) {
         const notificationId = `issue_${issue.id}`;
-        const isRead = readNotificationsCopy.includes(notificationId);
+        const existingRecord = existingHistoryById.get(notificationId) || this.notifications.get(notificationId) || {};
+        const isRead = readNotificationsCopy.includes(notificationId) || existingRecord.read === true;
         const currentUpdateTime = new Date(issue.updated_on).getTime();
         const previousState = previousIssueStates[issue.id];
+        const currentState = this.buildIssueSnapshot(issue);
+        const changeSummary = this.buildIssueChangeSummary(previousState, currentState);
         
         const notification = this.buildNotificationFromIssue(issue, {
+          ...existingRecord,
           read: isRead,
           isUpdated: false,
-          sourceType: issue.sourceType || 'unknown'
+          sourceType: issue.sourceType || existingRecord.sourceType || 'unknown',
+          changeSummary: [],
+          lastSeenState: currentState
         });
 
         // Check if this is a new issue or an updated issue
@@ -1344,6 +1546,7 @@ class NotificationManager {
               current: new Date(currentUpdateTime)
             });
             notification.isUpdated = true;
+            notification.changeSummary = changeSummary;
             
             // If the issue was previously read but now updated, show notification again
             if (isRead) {
@@ -1362,11 +1565,7 @@ class NotificationManager {
         this.notifications.set(notificationId, notification);
 
         // Update the issue state in storage
-        previousIssueStates[issue.id] = {
-          updatedOn: currentUpdateTime,
-          status: issue.status?.name,
-          subject: issue.subject
-        };
+        previousIssueStates[issue.id] = currentState;
       }
       
       // Update read notifications in storage only once after processing all issues
@@ -1377,6 +1576,10 @@ class NotificationManager {
 
       // Save updated issue states
       await chrome.storage.local.set({ issueStates: previousIssueStates });
+      await this.mergeNotificationHistory(
+        Array.from(this.notifications.values()),
+        { readNotificationIds: updatedReadNotifications }
+      );
 
       console.log('New notifications:', newNotifications.length);
       console.log('Updated notifications:', updatedNotifications.length);
@@ -1523,24 +1726,31 @@ class NotificationManager {
     const notification = this.notifications.get(notificationId);
     if (notification) {
       notification.read = true;
-      
-      const result = this.normalizeStorageResult(
-        await chrome.storage.sync.get(['readNotifications'])
-      );
-      const readNotifications = result.readNotifications || [];
-      
-      if (!readNotifications.includes(notificationId)) {
-        readNotifications.push(notificationId);
-        await chrome.storage.sync.set({ readNotifications });
-      }
-
-      // Update badge
-      const unreadCount = Array.from(this.notifications.values()).filter(n => !n.read).length;
-      this.updateBadge(unreadCount);
     }
+
+    const result = this.normalizeStorageResult(
+      await chrome.storage.sync.get(['readNotifications'])
+    );
+    const readNotifications = result.readNotifications || [];
+    
+    if (!readNotifications.includes(notificationId)) {
+      readNotifications.push(notificationId);
+      await chrome.storage.sync.set({ readNotifications });
+    }
+
+    const history = await this.loadNotificationHistory();
+    const updatedHistory = history.map(record => (
+      record.id === notificationId ? { ...record, read: true } : record
+    ));
+    await this.saveNotificationHistory(updatedHistory);
+
+    // Update badge
+    const unreadCount = updatedHistory.filter(n => !n.read).length;
+    this.updateBadge(unreadCount);
   }
 
   async markAllAsRead() {
+    const history = await this.loadNotificationHistory();
     const unreadNotifications = Array.from(this.notifications.values()).filter(n => !n.read);
     const result = this.normalizeStorageResult(
       await chrome.storage.sync.get(['readNotifications'])
@@ -1554,27 +1764,29 @@ class NotificationManager {
       }
     }
 
+    const updatedHistory = history.map(record => {
+      if (!readNotifications.includes(record.id)) {
+        readNotifications.push(record.id);
+      }
+
+      return { ...record, read: true };
+    });
+
     await chrome.storage.sync.set({ readNotifications });
+    await this.saveNotificationHistory(updatedHistory);
     this.updateBadge(0);
   }
 
-  async clearAllNotifications() {
-    // Clear all notifications from memory
+  async clearNotificationHistory() {
     this.notifications.clear();
-    
-    // Clear read notifications from storage
     await chrome.storage.sync.set({ readNotifications: [] });
-    
-    // Clear seen notifications from local storage
-    await chrome.storage.local.set({ seenNotifications: [] });
-    
-    // Clear issue states to reset update tracking
-    await chrome.storage.local.set({ issueStates: {} });
-    
-    // Update badge
+    await chrome.storage.local.set({
+      [this.notificationHistoryStorageKey]: [],
+      seenNotifications: [],
+      issueStates: {}
+    });
     this.updateBadge(0);
-    
-    // Clear any active desktop notifications
+
     chrome.notifications.getAll((notifications) => {
       Object.keys(notifications).forEach(notificationId => {
         chrome.notifications.clear(notificationId);
@@ -1590,7 +1802,12 @@ class NotificationManager {
     await this.checkNotifications();
   }
 
-  getNotifications() {
+  async getNotifications() {
+    const history = await this.loadNotificationHistory();
+    if (history.length > 0) {
+      return history;
+    }
+
     return Array.from(this.notifications.values()).sort((a, b) => b.updatedOn - a.updatedOn);
   }
 }
@@ -1721,8 +1938,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   switch (request.action) {
     case 'getNotifications':
-      sendResponse({ notifications: notificationManager.getNotifications() });
-      break;
+      return handleAsyncResponse(async () => ({
+        notifications: await notificationManager.getNotifications()
+      }));
       
     case 'markAsRead':
       return handleAsyncResponse(async () => {
@@ -1748,18 +1966,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'refreshNotifications':
       return handleAsyncResponse(async () => {
         await notificationManager.checkNotifications();
-        return { success: true, notifications: notificationManager.getNotifications() };
+        return { success: true, notifications: await notificationManager.getNotifications() };
       });
       
     case 'forceRefreshNotifications':
       return handleAsyncResponse(async () => {
         await notificationManager.forceRefreshNotifications();
-        return { success: true, notifications: notificationManager.getNotifications() };
+        return { success: true, notifications: await notificationManager.getNotifications() };
       });
       
-    case 'clearAllNotifications':
+    case 'clearNotificationHistory':
       return handleAsyncResponse(async () => {
-        await notificationManager.clearAllNotifications();
+        await notificationManager.clearNotificationHistory();
         return { success: true };
       });
 
