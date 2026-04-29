@@ -127,6 +127,12 @@ class PopupManager {
     if (notificationSearch) {
       notificationSearch.placeholder = this.translate('searchNotifications');
     }
+
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+    if (clearHistoryBtn) {
+      clearHistoryBtn.textContent = this.translate('clearNotificationHistory');
+      clearHistoryBtn.title = this.translate('clearNotificationHistory');
+    }
   }
 
   async sendRuntimeMessage(message) {
@@ -241,6 +247,13 @@ class PopupManager {
       notificationSearch.addEventListener('input', event => {
         this.searchQuery = event.target.value || '';
         this.renderNotifications();
+      });
+    }
+
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+    if (clearHistoryBtn) {
+      clearHistoryBtn.addEventListener('click', () => {
+        this.clearNotificationHistory();
       });
     }
 
@@ -1281,7 +1294,10 @@ class PopupManager {
       });
       
       if (response.success) {
-        this.notifications = [];
+        this.notifications = this.notifications.map(notification => ({
+          ...notification,
+          read: true
+        }));
         this.issueActionStates.clear();
         this.expandedNotificationId = undefined;
         this.renderNotifications();
@@ -1291,6 +1307,29 @@ class PopupManager {
     } catch (error) {
       console.error('Failed to clear all notifications:', error);
       alert(this.translate('clearAllError'));
+    }
+  }
+
+  async clearNotificationHistory() {
+    const confirmed = confirm(this.translate('clearHistoryConfirmation'));
+    if (!confirmed) return;
+
+    try {
+      const response = await this.sendRuntimeMessage({
+        action: 'clearNotificationHistory'
+      });
+
+      if (response.success) {
+        this.notifications = [];
+        this.issueActionStates.clear();
+        this.expandedNotificationId = undefined;
+        this.renderNotifications();
+      } else {
+        alert(this.translate('clearHistoryError'));
+      }
+    } catch (error) {
+      console.error('Failed to clear notification history:', error);
+      alert(this.translate('clearHistoryError'));
     }
   }
 }

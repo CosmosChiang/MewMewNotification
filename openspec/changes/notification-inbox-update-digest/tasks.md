@@ -26,9 +26,9 @@
 
 ## 4. Clear and History Semantics
 
-- [ ] 4.1 Define clear active notifications behavior without silently deleting retained history.
-- [ ] 4.2 Add explicit clear-history behavior with confirmation.
-- [ ] 4.3 Ensure clearing retained history resets the unread badge to zero.
+- [x] 4.1 Define clear active notifications behavior without silently deleting retained history.
+- [x] 4.2 Add explicit clear-history behavior with confirmation.
+- [x] 4.3 Ensure clearing retained history resets the unread badge to zero.
 
 ## 5. Localization and Styling
 

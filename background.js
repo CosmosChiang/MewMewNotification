@@ -1779,22 +1779,50 @@ class NotificationManager {
   }
 
   async clearAllNotifications() {
-    // Clear all notifications from memory
-    this.notifications.clear();
+    const history = await this.loadNotificationHistory();
+    const readNotifications = [];
+
+    this.notifications.forEach(notification => {
+      notification.read = true;
+      readNotifications.push(notification.id);
+    });
+
+    const updatedHistory = history.map(record => {
+      if (!readNotifications.includes(record.id)) {
+        readNotifications.push(record.id);
+      }
+
+      return { ...record, read: true };
+    });
     
-    // Clear read notifications from storage
-    await chrome.storage.sync.set({ readNotifications: [] });
+    // Preserve retained history while clearing the active unread surface.
+    await chrome.storage.sync.set({ readNotifications });
+    await this.saveNotificationHistory(updatedHistory);
     
     // Clear seen notifications from local storage
     await chrome.storage.local.set({ seenNotifications: [] });
-    
-    // Clear issue states to reset update tracking
-    await chrome.storage.local.set({ issueStates: {} });
-    
+
     // Update badge
     this.updateBadge(0);
     
     // Clear any active desktop notifications
+    chrome.notifications.getAll((notifications) => {
+      Object.keys(notifications).forEach(notificationId => {
+        chrome.notifications.clear(notificationId);
+      });
+    });
+  }
+
+  async clearNotificationHistory() {
+    this.notifications.clear();
+    await chrome.storage.sync.set({ readNotifications: [] });
+    await chrome.storage.local.set({
+      [this.notificationHistoryStorageKey]: [],
+      seenNotifications: [],
+      issueStates: {}
+    });
+    this.updateBadge(0);
+
     chrome.notifications.getAll((notifications) => {
       Object.keys(notifications).forEach(notificationId => {
         chrome.notifications.clear(notificationId);
@@ -1986,6 +2014,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'clearAllNotifications':
       return handleAsyncResponse(async () => {
         await notificationManager.clearAllNotifications();
+        return { success: true };
+      });
+
+    case 'clearNotificationHistory':
+      return handleAsyncResponse(async () => {
+        await notificationManager.clearNotificationHistory();
         return { success: true };
       });
 

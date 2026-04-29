@@ -194,6 +194,22 @@ body {
   box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
 }
 
+.clear-history-btn {
+  justify-self: end;
+  border: 1px solid #d92d20;
+  border-radius: 6px;
+  background: #fff;
+  color: #b42318;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.clear-history-btn:hover {
+  background: #fef3f2;
+}
+
 .notifications-list {
   max-height: 338px;
   overflow-y: auto;
