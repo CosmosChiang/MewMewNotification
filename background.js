@@ -1345,11 +1345,10 @@ class NotificationManager {
 
     this.notifications.set(notificationId, syncedNotification);
     await this.persistIssueState(issue);
-    await this.mergeNotificationHistory([syncedNotification], {
+    const retainedHistory = await this.mergeNotificationHistory([syncedNotification], {
       readNotificationIds: this.settings.readNotifications
     });
 
-    const retainedHistory = await this.loadNotificationHistory();
     const unreadCount = retainedHistory
       .filter(notification => !notification.read)
       .length;
