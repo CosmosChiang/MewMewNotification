@@ -20,7 +20,7 @@ Below are screenshots of the main MewMewNotification interfaces:
 - Desktop notifications and sound alerts, never miss important info
 - 30-second connection timeout protection to prevent hanging connections
 - Secure API key storage in local extension storage only, without cross-device sync
-- One-click mark all notifications as read or clear all notifications
+- One-click mark all notifications as read and explicit notification history clearing
 - Multi-language interface (Traditional Chinese, Simplified Chinese, Japanese, English; easily extensible)
 - Direct links to Redmine issue pages for quick tracking
 - Notification inbox with unread, read, and all views plus lightweight search
@@ -48,7 +48,6 @@ Below are screenshots of the main MewMewNotification interfaces:
   - **Search**: Filter the selected inbox view by issue id, title, project, or assignee.
   - **Update digest**: Updated issue cards show changed fields when comparable Redmine data is available.
   - **Mark all as read**: Marks all notifications as read, keeps history for later review.
-  - **Clear all notifications**: Clears the active unread notification surface without silently deleting retained history.
   - **Clear history**: Deletes retained notification history after confirmation and cannot be undone.
 - Each issue card now includes a **More actions** button:
   - **Quick reply**: Post a Redmine note directly from the popup with lightweight

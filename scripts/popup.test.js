@@ -81,7 +81,7 @@ describe('PopupManager', () => {
       markAllReadBtn: createMockElement(),
       settingsBtn: createMockElement(),
       retryBtn: createMockElement(),
-      clearAllBtn: createMockElement()
+      clearHistoryBtn: createMockElement()
     };
 
     global.window = { close: jest.fn() };

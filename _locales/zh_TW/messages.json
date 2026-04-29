@@ -312,7 +312,7 @@
     "description": "Feature 3 description"
   },
   "feature4": {
-    "message": "清除所有通知",
+    "message": "清除通知歷史",
     "description": "Feature 4 description"
   },
   "feature5": {
@@ -414,18 +414,6 @@
   "refreshNotifications": {
     "message": "立即刷新",
     "description": "Refresh notifications button tooltip"
-  },
-  "clearAllNotifications": {
-    "message": "清除所有通知",
-    "description": "Clear all notifications button tooltip"
-  },
-  "clearAllConfirmation": {
-    "message": "您確定要清除所有通知嗎？此操作無法復原。",
-    "description": "Clear all notifications confirmation message"
-  },
-  "clearAllError": {
-    "message": "清除通知失敗，請稍後再試。",
-    "description": "Clear all notifications error message"
   },
   "urlRequired": {
     "message": "Redmine URL 為必填欄位",

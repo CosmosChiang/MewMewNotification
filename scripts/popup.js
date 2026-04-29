@@ -100,11 +100,6 @@ class PopupManager {
       refreshBtn.title = this.translate('refreshNotifications');
     }
 
-    const clearAllBtn = document.getElementById('clearAllBtn');
-    if (clearAllBtn) {
-      clearAllBtn.title = this.translate('clearAllNotifications');
-    }
-
     const retryBtn = document.getElementById('retryBtn');
     if (retryBtn) {
       retryBtn.textContent = this.translate('retry');
@@ -226,10 +221,6 @@ class PopupManager {
 
     document.getElementById('refreshBtn').addEventListener('click', () => {
       this.refreshNotifications();
-    });
-
-    document.getElementById('clearAllBtn').addEventListener('click', () => {
-      this.clearAllNotifications();
     });
 
     document.getElementById('retryBtn').addEventListener('click', () => {
@@ -1281,32 +1272,6 @@ class PopupManager {
     } catch (error) {
       console.error('Failed to refresh notifications:', error);
       this.loadNotifications();
-    }
-  }
-
-  async clearAllNotifications() {
-    const confirmed = confirm(this.translate('clearAllConfirmation'));
-    if (!confirmed) return;
-    
-    try {
-      const response = await this.sendRuntimeMessage({ 
-        action: 'clearAllNotifications' 
-      });
-      
-      if (response.success) {
-        this.notifications = this.notifications.map(notification => ({
-          ...notification,
-          read: true
-        }));
-        this.issueActionStates.clear();
-        this.expandedNotificationId = undefined;
-        this.renderNotifications();
-      } else {
-        alert(this.translate('clearAllError'));
-      }
-    } catch (error) {
-      console.error('Failed to clear all notifications:', error);
-      alert(this.translate('clearAllError'));
     }
   }
 

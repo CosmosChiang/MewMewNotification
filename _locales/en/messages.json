@@ -312,7 +312,7 @@
     "description": "Feature 3 description"
   },
   "feature4": {
-    "message": "Clear all notifications",
+    "message": "Clear notification history",
     "description": "Feature 4 description"
   },
   "feature5": {
@@ -414,18 +414,6 @@
   "refreshNotifications": {
     "message": "Refresh notifications",
     "description": "Refresh notifications button tooltip"
-  },
-  "clearAllNotifications": {
-    "message": "Clear all notifications",
-    "description": "Clear all notifications button tooltip"
-  },
-  "clearAllConfirmation": {
-    "message": "Are you sure you want to clear all notifications? This action cannot be undone.",
-    "description": "Clear all notifications confirmation message"
-  },
-  "clearAllError": {
-    "message": "Failed to clear notifications. Please try again later.",
-    "description": "Clear all notifications error message"
   },
   "urlRequired": {
     "message": "Redmine URL is required",

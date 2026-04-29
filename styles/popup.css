@@ -43,8 +43,7 @@ body {
 
 .mark-all-read-btn,
 .settings-btn,
-.refresh-btn,
-.clear-all-btn {
+.refresh-btn {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   color: white;
@@ -61,8 +60,7 @@ body {
 
 .mark-all-read-btn:hover,
 .settings-btn:hover,
-.refresh-btn:hover,
-.clear-all-btn:hover {
+.refresh-btn:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 
@@ -78,10 +76,6 @@ body {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-.clear-all-btn:hover {
-  background: rgba(255, 0, 0, 0.3);
 }
 
 .notification-item {
@@ -125,8 +119,7 @@ body {
 
 .mark-all-read-btn:disabled,
 .settings-btn:disabled,
-.refresh-btn:disabled,
-.clear-all-btn:disabled {
+.refresh-btn:disabled {
   background: rgba(255, 255, 255, 0.1);
   cursor: not-allowed;
   opacity: 0.6;
