@@ -3,6 +3,9 @@ class PopupManager {
     this.currentLanguage = 'en';
     this.translations = {};
     this.notifications = [];
+    this.visibleNotifications = [];
+    this.activeInboxView = 'unread';
+    this.searchQuery = '';
     this.renderQueue = [];
     this.isRendering = false;
     this.expandedNotificationId = undefined;
@@ -106,6 +109,24 @@ class PopupManager {
     if (retryBtn) {
       retryBtn.textContent = this.translate('retry');
     }
+
+    const inboxLabels = {
+      inboxUnreadTab: 'inboxUnread',
+      inboxReadTab: 'inboxRead',
+      inboxAllTab: 'inboxAll'
+    };
+
+    Object.entries(inboxLabels).forEach(([elementId, translationKey]) => {
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.textContent = this.translate(translationKey);
+      }
+    });
+
+    const notificationSearch = document.getElementById('notificationSearch');
+    if (notificationSearch) {
+      notificationSearch.placeholder = this.translate('searchNotifications');
+    }
   }
 
   async sendRuntimeMessage(message) {
@@ -170,6 +191,7 @@ class PopupManager {
         <div class="notification-content">
           <div class="notification-title"></div>
           <div class="notification-meta"></div>
+          <div class="change-summary"></div>
         </div>
         <div class="notification-actions"></div>
         <div class="advanced-actions-panel" hidden></div>
@@ -208,6 +230,20 @@ class PopupManager {
       this.loadNotifications();
     });
 
+    document.querySelectorAll('.inbox-tab').forEach(button => {
+      button.addEventListener('click', () => {
+        this.setInboxView(button.dataset.view || 'unread');
+      });
+    });
+
+    const notificationSearch = document.getElementById('notificationSearch');
+    if (notificationSearch) {
+      notificationSearch.addEventListener('input', event => {
+        this.searchQuery = event.target.value || '';
+        this.renderNotifications();
+      });
+    }
+
     chrome.storage.onChanged.addListener((changes, namespace) => {
       if (namespace === 'sync' && changes.language) {
         this.loadLanguage();
@@ -223,7 +259,6 @@ class PopupManager {
       
       if (response.success) {
         this.notifications = response.notifications
-          .filter(notification => !notification.read)
           .map(notification => this.normalizeNotification(notification));
         this.pruneIssueActionState();
         this.throttledRender();
@@ -241,6 +276,79 @@ class PopupManager {
       ...notification,
       updatedOn: notification.updatedOn ? new Date(notification.updatedOn) : new Date()
     };
+  }
+
+  setInboxView(view) {
+    if (!['unread', 'read', 'all'].includes(view)) {
+      return;
+    }
+
+    this.activeInboxView = view;
+    this.expandedNotificationId = undefined;
+    this.updateInboxControls();
+    this.renderNotifications();
+  }
+
+  updateInboxControls() {
+    document.querySelectorAll('.inbox-tab').forEach(button => {
+      const isActive = button.dataset.view === this.activeInboxView;
+      button.classList.toggle('active', isActive);
+      button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+  }
+
+  notificationMatchesInboxView(notification) {
+    if (this.activeInboxView === 'read') {
+      return notification.read === true;
+    }
+
+    if (this.activeInboxView === 'all') {
+      return true;
+    }
+
+    return notification.read !== true;
+  }
+
+  notificationMatchesSearch(notification) {
+    const query = this.searchQuery.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    const searchableValues = [
+      notification.issueId,
+      notification.id,
+      notification.title,
+      notification.project,
+      notification.assigneeName
+    ];
+
+    return searchableValues
+      .filter(value => value !== undefined && value !== null)
+      .some(value => String(value).toLowerCase().includes(query));
+  }
+
+  getVisibleNotifications() {
+    return this.notifications
+      .filter(notification => this.notificationMatchesInboxView(notification))
+      .filter(notification => this.notificationMatchesSearch(notification))
+      .sort((left, right) => right.updatedOn - left.updatedOn);
+  }
+
+  getEmptyStateMessage() {
+    if (this.searchQuery.trim()) {
+      return this.translate('noMatchingNotifications');
+    }
+
+    if (this.activeInboxView === 'read') {
+      return this.translate('noReadNotifications');
+    }
+
+    if (this.activeInboxView === 'all') {
+      return this.translate('noNotificationHistory');
+    }
+
+    return this.translate('noNotifications');
   }
 
   pruneIssueActionState() {
@@ -279,20 +387,26 @@ class PopupManager {
     const notificationsList = document.getElementById('notificationsList');
     const emptyState = document.getElementById('emptyState');
     const errorState = document.getElementById('errorState');
+    const emptyText = document.getElementById('emptyText');
 
     loadingIndicator.style.display = 'none';
     errorState.style.display = 'none';
+    this.updateInboxControls();
+    this.visibleNotifications = this.getVisibleNotifications();
 
-    if (this.notifications.length === 0) {
+    if (this.visibleNotifications.length === 0) {
       notificationsList.style.display = 'none';
       emptyState.style.display = 'block';
+      if (emptyText) {
+        emptyText.textContent = this.getEmptyStateMessage();
+      }
       return;
     }
 
     emptyState.style.display = 'none';
     notificationsList.style.display = 'block';
     
-    if (this.notifications.length > 20 && !this.expandedNotificationId) {
+    if (this.visibleNotifications.length > 20 && !this.expandedNotificationId) {
       this.renderVirtualScrollNotifications(notificationsList);
     } else {
       this.renderAllNotifications(notificationsList);
@@ -306,7 +420,7 @@ class PopupManager {
   renderAllNotifications(container) {
     const fragment = document.createDocumentFragment();
     
-    this.notifications.forEach(notification => {
+    this.visibleNotifications.forEach(notification => {
       const notificationElement = this.createNotificationElement(notification);
       fragment.appendChild(notificationElement);
     });
@@ -321,7 +435,7 @@ class PopupManager {
     container.style.overflowY = 'auto';
     
     const virtualContainer = document.createElement('div');
-    virtualContainer.style.height = `${this.notifications.length * this.virtualScrollConfig.itemHeight}px`;
+    virtualContainer.style.height = `${this.visibleNotifications.length * this.virtualScrollConfig.itemHeight}px`;
     virtualContainer.style.position = 'relative';
     
     const viewportContainer = document.createElement('div');
@@ -351,14 +465,14 @@ class PopupManager {
     
     const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - bufferSize);
     const endIndex = Math.min(
-      this.notifications.length - 1,
+      this.visibleNotifications.length - 1,
       Math.floor((scrollTop + containerHeight) / itemHeight) + bufferSize
     );
     
     const fragment = document.createDocumentFragment();
     
     for (let index = startIndex; index <= endIndex; index += 1) {
-      const notification = this.notifications[index];
+      const notification = this.visibleNotifications[index];
       const element = this.createNotificationElement(notification);
       element.style.position = 'absolute';
       element.style.top = `${index * itemHeight}px`;
@@ -387,6 +501,7 @@ class PopupManager {
     const contentDiv = element.querySelector('.notification-content');
     const titleDiv = element.querySelector('.notification-title');
     const metaDiv = element.querySelector('.notification-meta');
+    const changeSummaryDiv = element.querySelector('.change-summary');
     const actionsDiv = element.querySelector('.notification-actions');
     const advancedPanel = element.querySelector('.advanced-actions-panel');
     
@@ -438,6 +553,8 @@ class PopupManager {
       updateText.textContent = this.translate('updated');
       metaDiv.appendChild(updateText);
     }
+
+    this.renderChangeSummary(notification, changeSummaryDiv);
     
     actionsDiv.innerHTML = '';
 
@@ -480,6 +597,44 @@ class PopupManager {
     });
  
     return element;
+  }
+
+  renderChangeSummary(notification, container) {
+    if (!container) {
+      return;
+    }
+
+    container.innerHTML = '';
+    const changeSummary = Array.isArray(notification.changeSummary)
+      ? notification.changeSummary
+      : [];
+
+    if (changeSummary.length === 0) {
+      if (notification.isUpdated) {
+        const genericUpdate = document.createElement('div');
+        genericUpdate.className = 'change-summary-row generic';
+        genericUpdate.textContent = this.translate('issueUpdatedWithoutDetails');
+        container.appendChild(genericUpdate);
+      }
+      return;
+    }
+
+    changeSummary.forEach(change => {
+      const row = document.createElement('div');
+      row.className = 'change-summary-row';
+
+      const label = document.createElement('span');
+      label.className = 'change-field';
+      label.textContent = this.translate(`changeField_${change.field}`);
+
+      const value = document.createElement('span');
+      value.className = 'change-values';
+      value.textContent = this.translate('changedFromTo', [change.from || '-', change.to || '-']);
+
+      row.appendChild(label);
+      row.appendChild(value);
+      container.appendChild(row);
+    });
   }
 
   getIssueActionState(notificationId) {
@@ -1051,7 +1206,9 @@ class PopupManager {
       });
       
       if (response.success) {
-        this.notifications = this.notifications.filter(notification => notification.id !== notificationId);
+        this.notifications = this.notifications.map(notification => (
+          notification.id === notificationId ? { ...notification, read: true } : notification
+        ));
         this.issueActionStates.delete(notificationId);
         if (this.expandedNotificationId === notificationId) {
           this.expandedNotificationId = undefined;
@@ -1068,7 +1225,10 @@ class PopupManager {
       const response = await this.sendRuntimeMessage({ action: 'markAllAsRead' });
       
       if (response.success) {
-        this.notifications = [];
+        this.notifications = this.notifications.map(notification => ({
+          ...notification,
+          read: true
+        }));
         this.issueActionStates.clear();
         this.expandedNotificationId = undefined;
         this.renderNotifications();
@@ -1099,7 +1259,6 @@ class PopupManager {
       
       if (response.success) {
         this.notifications = response.notifications
-          .filter(notification => !notification.read)
           .map(notification => this.normalizeNotification(notification));
         this.pruneIssueActionState();
         this.renderNotifications();

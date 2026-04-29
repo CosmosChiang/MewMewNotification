@@ -128,7 +128,7 @@ describe('PopupManager', () => {
     expect(manager.sanitizeAttribute(15)).toBe('15');
   });
 
-  test('loads notifications, keeps unread items, and triggers rendering', async () => {
+  test('loads notifications, keeps retained items, and triggers rendering', async () => {
     manager.throttledRender = jest.fn();
     global.chrome.runtime.sendMessage.mockResolvedValue({
       success: true,
@@ -147,10 +147,16 @@ describe('PopupManager', () => {
     );
     expect(manager.notifications).toEqual([
       expect.objectContaining({ id: 1, read: false }),
+      expect.objectContaining({ id: 2, read: true }),
       expect.objectContaining({ id: 3, read: false })
     ]);
     expect(manager.notifications[0].updatedOn).toBeInstanceOf(Date);
     expect(manager.notifications[1].updatedOn).toBeInstanceOf(Date);
+    expect(manager.notifications[2].updatedOn).toBeInstanceOf(Date);
+    expect(manager.getVisibleNotifications()).toEqual([
+      expect.objectContaining({ id: 1, read: false }),
+      expect.objectContaining({ id: 3, read: false })
+    ]);
     expect(manager.throttledRender).toHaveBeenCalled();
     expect(elements.loadingIndicator.style.display).toBe('flex');
   });
@@ -181,7 +187,11 @@ describe('PopupManager', () => {
       },
       expect.any(Function)
     );
-    expect(manager.notifications).toEqual([{ id: 2, read: false }]);
+    expect(manager.notifications).toEqual([
+      { id: 1, read: true },
+      { id: 2, read: false }
+    ]);
+    expect(manager.getVisibleNotifications()).toEqual([{ id: 2, read: false }]);
     expect(manager.renderNotifications).toHaveBeenCalled();
   });
 

@@ -16,13 +16,13 @@
 
 ## 3. Popup Inbox UI
 
-- [ ] 3.1 Add unread, read, and all inbox view controls to `popup.html`.
-- [ ] 3.2 Add a lightweight search input to `popup.html`.
-- [ ] 3.3 Update `scripts/popup.js` to keep inbox view and search state.
-- [ ] 3.4 Remove the fixed unread-only render filter and filter notifications by selected inbox view.
-- [ ] 3.5 Implement client-side search by issue id, title, project, and assignee.
-- [ ] 3.6 Render change digest rows on notification cards when `changeSummary` is present.
-- [ ] 3.7 Keep unread as the default popup view and keep empty states accurate for each view.
+- [x] 3.1 Add unread, read, and all inbox view controls to `popup.html`.
+- [x] 3.2 Add a lightweight search input to `popup.html`.
+- [x] 3.3 Update `scripts/popup.js` to keep inbox view and search state.
+- [x] 3.4 Remove the fixed unread-only render filter and filter notifications by selected inbox view.
+- [x] 3.5 Implement client-side search by issue id, title, project, and assignee.
+- [x] 3.6 Render change digest rows on notification cards when `changeSummary` is present.
+- [x] 3.7 Keep unread as the default popup view and keep empty states accurate for each view.
 
 ## 4. Clear and History Semantics
 

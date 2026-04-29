@@ -25,6 +25,15 @@
   </div>
   
   <div class="content">
+    <div class="inbox-controls" aria-label="Notification inbox views">
+      <div class="inbox-tabs" role="tablist">
+        <button id="inboxUnreadTab" class="inbox-tab active" data-view="unread" role="tab" aria-selected="true">Unread</button>
+        <button id="inboxReadTab" class="inbox-tab" data-view="read" role="tab" aria-selected="false">Read</button>
+        <button id="inboxAllTab" class="inbox-tab" data-view="all" role="tab" aria-selected="false">All</button>
+      </div>
+      <input id="notificationSearch" class="notification-search" type="search" placeholder="Search notifications">
+    </div>
+
     <div id="loadingIndicator" class="loading">
       <div class="spinner"></div>
       <span id="loadingText">Loading notifications...</span>
