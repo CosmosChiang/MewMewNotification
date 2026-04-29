@@ -542,5 +542,69 @@
   "clickToViewAll": {
     "message": "點擊查看全部",
     "description": "Context message for batch notifications"
+  },
+  "inboxUnread": {
+    "message": "未讀",
+    "description": "Inbox tab for unread notifications"
+  },
+  "inboxRead": {
+    "message": "已讀",
+    "description": "Inbox tab for read notifications"
+  },
+  "inboxAll": {
+    "message": "全部",
+    "description": "Inbox tab for all retained notifications"
+  },
+  "searchNotifications": {
+    "message": "搜尋通知",
+    "description": "Search field placeholder for notification inbox"
+  },
+  "noReadNotifications": {
+    "message": "沒有已讀通知",
+    "description": "Empty state for read inbox view"
+  },
+  "noNotificationHistory": {
+    "message": "沒有通知歷史",
+    "description": "Empty state for all retained notification history"
+  },
+  "noMatchingNotifications": {
+    "message": "沒有符合的通知",
+    "description": "Empty state when inbox search has no results"
+  },
+  "clearNotificationHistory": {
+    "message": "清除歷史",
+    "description": "Button label for clearing retained notification history"
+  },
+  "clearHistoryConfirmation": {
+    "message": "確定要清除所有通知歷史嗎？此操作無法復原。",
+    "description": "Confirmation message for clearing retained notification history"
+  },
+  "clearHistoryError": {
+    "message": "清除通知歷史失敗，請稍後再試。",
+    "description": "Error message when clearing retained notification history fails"
+  },
+  "issueUpdatedWithoutDetails": {
+    "message": "議題已更新，但無法取得詳細變更",
+    "description": "Generic update digest when field-level changes are unavailable"
+  },
+  "changedFromTo": {
+    "message": "$1 → $2",
+    "description": "Change digest value showing old and new values"
+  },
+  "changeField_subject": {
+    "message": "主旨",
+    "description": "Change digest field label for subject"
+  },
+  "changeField_status": {
+    "message": "狀態",
+    "description": "Change digest field label for status"
+  },
+  "changeField_priority": {
+    "message": "優先權",
+    "description": "Change digest field label for priority"
+  },
+  "changeField_assignee": {
+    "message": "指派人員",
+    "description": "Change digest field label for assignee"
   }
 }

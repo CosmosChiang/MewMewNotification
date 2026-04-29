@@ -32,9 +32,9 @@
 
 ## 5. Localization and Styling
 
-- [ ] 5.1 Add inbox, search, read/all/unread, digest, no-history, and clear-history strings to all locale files.
-- [ ] 5.2 Style inbox tabs, search field, digest rows, and history empty states in `styles/popup.css`.
-- [ ] 5.3 Verify popup layout remains usable with long localized labels.
+- [x] 5.1 Add inbox, search, read/all/unread, digest, no-history, and clear-history strings to all locale files.
+- [x] 5.2 Style inbox tabs, search field, digest rows, and history empty states in `styles/popup.css`.
+- [x] 5.3 Verify popup layout remains usable with long localized labels.
 
 ## 6. Tests and Documentation
 
