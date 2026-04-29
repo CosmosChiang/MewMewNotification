@@ -7,12 +7,12 @@
 
 ## 2. Background Notification Flow
 
-- [ ] 2.1 Merge newly fetched Redmine issue notifications into local notification history.
-- [ ] 2.2 Generate issue field snapshots for subject, status, priority, assignee, and update timestamp.
-- [ ] 2.3 Compare previous and current issue snapshots to produce `changeSummary` entries.
-- [ ] 2.4 Preserve generic updated indicators when no comparable field changes are available.
-- [ ] 2.5 Update mark-as-read and mark-all-read flows to preserve local history and recalculate unread badge count.
-- [ ] 2.6 Add or update runtime message responses so popup can retrieve retained notification history.
+- [x] 2.1 Merge newly fetched Redmine issue notifications into local notification history.
+- [x] 2.2 Generate issue field snapshots for subject, status, priority, assignee, and update timestamp.
+- [x] 2.3 Compare previous and current issue snapshots to produce `changeSummary` entries.
+- [x] 2.4 Preserve generic updated indicators when no comparable field changes are available.
+- [x] 2.5 Update mark-as-read and mark-all-read flows to preserve local history and recalculate unread badge count.
+- [x] 2.6 Add or update runtime message responses so popup can retrieve retained notification history.
 
 ## 3. Popup Inbox UI
 
