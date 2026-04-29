@@ -38,8 +38,8 @@
 
 ## 6. Tests and Documentation
 
-- [ ] 6.1 Add background tests for history persistence, retention, read state preservation, and digest generation.
-- [ ] 6.2 Add popup tests for unread/read/all view filtering and search behavior.
-- [ ] 6.3 Add popup tests for digest rendering and view-specific empty states.
-- [ ] 6.4 Update README documentation for inbox history, update digest, mark-as-read, clear, and clear-history behavior.
-- [ ] 6.5 Run the relevant local test suite and fix regressions.
+- [x] 6.1 Add background tests for history persistence, retention, read state preservation, and digest generation.
+- [x] 6.2 Add popup tests for unread/read/all view filtering and search behavior.
+- [x] 6.3 Add popup tests for digest rendering and view-specific empty states.
+- [x] 6.4 Update README documentation for inbox history, update digest, mark-as-read, clear, and clear-history behavior.
+- [x] 6.5 Run the relevant local test suite and fix regressions.

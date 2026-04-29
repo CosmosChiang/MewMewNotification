@@ -330,6 +330,82 @@ describe('NotificationManager host permission recovery', () => {
     });
   });
 
+  test('retains only the newest notification history records when saving', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.notificationHistoryLimit = 2;
+
+    const retainedHistory = await manager.saveNotificationHistory([
+      { id: 'issue_1', updatedOn: '2026-04-28T08:00:00.000Z' },
+      { id: 'issue_2', updatedOn: '2026-04-29T08:00:00.000Z' },
+      { id: 'issue_3', updatedOn: '2026-04-27T08:00:00.000Z' }
+    ]);
+
+    expect(retainedHistory.map(record => record.id)).toEqual(['issue_2', 'issue_1']);
+    expect(chromeMock.storage.local.set).toHaveBeenCalledWith({
+      notificationHistory: [
+        expect.objectContaining({ id: 'issue_2', updatedOn: '2026-04-29T08:00:00.000Z' }),
+        expect.objectContaining({ id: 'issue_1', updatedOn: '2026-04-28T08:00:00.000Z' })
+      ]
+    });
+  });
+
+  test('merges notification history with existing read state and legacy read ids', async () => {
+    const chromeMock = createChromeMock();
+    chromeMock.storage.local.get.mockResolvedValue({
+      notificationHistory: [
+        { id: 'issue_1', title: 'Existing issue', read: true, updatedOn: '2026-04-28T08:00:00.000Z' }
+      ]
+    });
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+
+    const history = await manager.mergeNotificationHistory([
+      { id: 'issue_1', title: 'Existing issue updated', read: false, updatedOn: '2026-04-29T08:00:00.000Z' },
+      { id: 'issue_2', title: 'Legacy read issue', read: false, updatedOn: '2026-04-29T07:00:00.000Z' }
+    ], {
+      readNotificationIds: ['issue_2']
+    });
+
+    expect(history).toEqual([
+      expect.objectContaining({ id: 'issue_1', read: true, title: 'Existing issue updated' }),
+      expect.objectContaining({ id: 'issue_2', read: true })
+    ]);
+  });
+
+  test('builds issue change summaries from comparable issue snapshots', () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+
+    const changes = manager.buildIssueChangeSummary(
+      {
+        subject: 'Old subject',
+        status: 'New',
+        priority: 'Normal',
+        assigneeId: 1,
+        assigneeName: 'Alice',
+        updatedOn: 1
+      },
+      {
+        subject: 'New subject',
+        status: 'In Progress',
+        priority: 'High',
+        assigneeId: 2,
+        assigneeName: 'Bob',
+        updatedOn: 2
+      }
+    );
+
+    expect(changes).toEqual([
+      { field: 'subject', from: 'Old subject', to: 'New subject' },
+      { field: 'status', from: 'New', to: 'In Progress' },
+      { field: 'priority', from: 'Normal', to: 'High' },
+      { field: 'assignee', from: 'Alice', to: 'Bob' }
+    ]);
+  });
+
   test('message handler returns a useful error for non-Error throws', async () => {
     const chromeMock = createChromeMock();
     loadBackgroundModule(chromeMock);
