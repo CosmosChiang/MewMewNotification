@@ -1,9 +1,9 @@
 ## 1. Data Model and Storage
 
-- [ ] 1.1 Define the local notification history record shape and storage key.
-- [ ] 1.2 Add helpers to load, normalize, save, and retain notification history in `chrome.storage.local`.
-- [ ] 1.3 Apply a fixed bounded retention policy when saving history.
-- [ ] 1.4 Reconcile existing `readNotifications` state with local history records during history merge.
+- [x] 1.1 Define the local notification history record shape and storage key.
+- [x] 1.2 Add helpers to load, normalize, save, and retain notification history in `chrome.storage.local`.
+- [x] 1.3 Apply a fixed bounded retention policy when saving history.
+- [x] 1.4 Reconcile existing `readNotifications` state with local history records during history merge.
 
 ## 2. Background Notification Flow
 

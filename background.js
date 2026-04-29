@@ -3,6 +3,8 @@ if (typeof importScripts === 'function') {
 }
 
 const HOST_PERMISSION_RECOVERY_NOTIFICATION_ID = 'host-permission-recovery';
+const NOTIFICATION_HISTORY_STORAGE_KEY = 'notificationHistory';
+const MAX_NOTIFICATION_HISTORY_ITEMS = 100;
 
 class RedmineAPI {
   constructor(baseUrl, apiKey) {
@@ -763,6 +765,8 @@ class RedmineAPI {
 class NotificationManager {
   constructor() {
     this.notifications = new Map();
+    this.notificationHistoryStorageKey = NOTIFICATION_HISTORY_STORAGE_KEY;
+    this.notificationHistoryLimit = MAX_NOTIFICATION_HISTORY_ITEMS;
     this.settings = this.getDefaultSettings();
     this.settingsLoaded = false;
     this.settingsLoadPromise = undefined;
@@ -836,6 +840,143 @@ class NotificationManager {
     return configManagerClass?.normalizeStorageResult
       ? configManagerClass.normalizeStorageResult(result)
       : (result && typeof result === 'object' ? result : {});
+  }
+
+  parseHistoryDate(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? new Date(0) : date;
+  }
+
+  normalizeChangeSummary(changeSummary) {
+    if (!Array.isArray(changeSummary)) {
+      return [];
+    }
+
+    return changeSummary
+      .filter(item => item && typeof item === 'object' && typeof item.field === 'string')
+      .map(item => ({
+        field: item.field,
+        from: item.from === undefined || item.from === null ? '' : String(item.from),
+        to: item.to === undefined || item.to === null ? '' : String(item.to)
+      }));
+  }
+
+  normalizeIssueSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') {
+      return undefined;
+    }
+
+    return {
+      subject: typeof snapshot.subject === 'string' ? snapshot.subject : '',
+      status: typeof snapshot.status === 'string' ? snapshot.status : '',
+      priority: typeof snapshot.priority === 'string' ? snapshot.priority : '',
+      assigneeId: Number.isInteger(snapshot.assigneeId) ? snapshot.assigneeId : undefined,
+      assigneeName: typeof snapshot.assigneeName === 'string' ? snapshot.assigneeName : '',
+      updatedOn: Number.isFinite(snapshot.updatedOn) ? snapshot.updatedOn : 0
+    };
+  }
+
+  normalizeNotificationHistoryRecord(record) {
+    if (!record || typeof record !== 'object') {
+      return undefined;
+    }
+
+    const id = typeof record.id === 'string' ? record.id : '';
+    if (!id) {
+      return undefined;
+    }
+
+    const updatedOn = this.parseHistoryDate(record.updatedOn);
+
+    return {
+      id,
+      issueId: Number.isInteger(record.issueId) ? record.issueId : undefined,
+      title: typeof record.title === 'string' ? record.title : '',
+      project: typeof record.project === 'string' ? record.project : '',
+      author: typeof record.author === 'string' ? record.author : '',
+      status: typeof record.status === 'string' ? record.status : '',
+      priority: typeof record.priority === 'string' ? record.priority : '',
+      assigneeId: Number.isInteger(record.assigneeId) ? record.assigneeId : undefined,
+      assigneeName: typeof record.assigneeName === 'string' ? record.assigneeName : '',
+      projectId: Number.isInteger(record.projectId) ? record.projectId : undefined,
+      updatedOn,
+      url: typeof record.url === 'string' ? record.url : '',
+      read: record.read === true,
+      isUpdated: record.isUpdated === true,
+      sourceType: typeof record.sourceType === 'string' ? record.sourceType : 'unknown',
+      changeSummary: this.normalizeChangeSummary(record.changeSummary),
+      lastSeenState: this.normalizeIssueSnapshot(record.lastSeenState)
+    };
+  }
+
+  serializeNotificationHistoryRecord(record) {
+    const normalizedRecord = this.normalizeNotificationHistoryRecord(record);
+    if (!normalizedRecord) {
+      return undefined;
+    }
+
+    return {
+      ...normalizedRecord,
+      updatedOn: normalizedRecord.updatedOn.toISOString()
+    };
+  }
+
+  applyNotificationHistoryRetention(records) {
+    return records
+      .map(record => this.normalizeNotificationHistoryRecord(record))
+      .filter(Boolean)
+      .sort((left, right) => right.updatedOn - left.updatedOn)
+      .slice(0, this.notificationHistoryLimit);
+  }
+
+  async loadNotificationHistory() {
+    const result = this.normalizeStorageResult(
+      await chrome.storage.local.get([this.notificationHistoryStorageKey])
+    );
+    const history = Array.isArray(result[this.notificationHistoryStorageKey])
+      ? result[this.notificationHistoryStorageKey]
+      : [];
+
+    return this.applyNotificationHistoryRetention(history);
+  }
+
+  async saveNotificationHistory(history) {
+    const retainedHistory = this.applyNotificationHistoryRetention(history);
+    const serializedHistory = retainedHistory
+      .map(record => this.serializeNotificationHistoryRecord(record))
+      .filter(Boolean);
+
+    await chrome.storage.local.set({
+      [this.notificationHistoryStorageKey]: serializedHistory
+    });
+
+    return retainedHistory;
+  }
+
+  async mergeNotificationHistory(notifications, { readNotificationIds = [] } = {}) {
+    const existingHistory = await this.loadNotificationHistory();
+    const historyById = new Map(existingHistory.map(record => [record.id, record]));
+    const readNotificationSet = new Set(Array.isArray(readNotificationIds) ? readNotificationIds : []);
+
+    (Array.isArray(notifications) ? notifications : []).forEach(notification => {
+      const normalizedNotification = this.normalizeNotificationHistoryRecord(notification);
+      if (!normalizedNotification) {
+        return;
+      }
+
+      const existingRecord = historyById.get(normalizedNotification.id);
+      const reconciledReadState = normalizedNotification.isUpdated
+        ? normalizedNotification.read
+        : normalizedNotification.read || existingRecord?.read === true || readNotificationSet.has(normalizedNotification.id);
+
+      historyById.set(normalizedNotification.id, {
+        ...existingRecord,
+        ...normalizedNotification,
+        read: reconciledReadState
+      });
+    });
+
+    return this.saveNotificationHistory(Array.from(historyById.values()));
   }
 
   async loadSettings({ notifyPermissionRecovery = false } = {}) {
