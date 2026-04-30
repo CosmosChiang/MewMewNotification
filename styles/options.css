@@ -180,8 +180,37 @@ small {
   margin-top: 12px;
 }
 
-#notificationProjectSelection {
-  min-height: 220px;
+.project-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  background: white;
+}
+
+.project-checkbox-list:focus-within {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.project-checkbox-list.disabled {
+  background: #f8f9fa;
+  opacity: 0.75;
+}
+
+.project-checkbox-item {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.project-checkbox-item:hover {
+  background: #f8f9fa;
 }
 
 .secondary-btn {

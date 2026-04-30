@@ -384,20 +384,20 @@ class OptionsManager {
   }
 
   getSelectedNotificationProjectIds() {
-    const projectSelect = document.getElementById('notificationProjectSelection');
-    if (!projectSelect?.options) {
+    const projectSelection = document.getElementById('notificationProjectSelection');
+    if (!projectSelection?.querySelectorAll) {
       return [];
     }
 
-    return Array.from(projectSelect.options)
-      .filter(option => option.selected)
-      .map(option => Number.parseInt(option.value, 10))
+    return Array.from(projectSelection.querySelectorAll('.project-checkbox-input'))
+      .filter(checkbox => checkbox.checked === true)
+      .map(checkbox => Number.parseInt(checkbox.value, 10))
       .filter(value => Number.isSafeInteger(value) && value > 0);
   }
 
   renderNotificationProjectOptions() {
-    const projectSelect = document.getElementById('notificationProjectSelection');
-    if (!projectSelect) {
+    const projectSelection = document.getElementById('notificationProjectSelection');
+    if (!projectSelection) {
       return;
     }
 
@@ -412,27 +412,48 @@ class OptionsManager {
       ).map(value => String(value))
     );
 
-    projectSelect.innerHTML = '';
-    if (Array.isArray(projectSelect.options)) {
-      projectSelect.options.length = 0;
+    projectSelection.innerHTML = '';
+    if (Array.isArray(projectSelection.children)) {
+      projectSelection.children.length = 0;
     }
 
     this.availableNotificationProjects.forEach(project => {
-      const option = document.createElement('option');
-      option.value = String(project.id);
-      option.text = project.identifier ? `${project.name} (${project.identifier})` : project.name;
-      option.selected = selectedProjectIds.has(String(project.id));
-      projectSelect.appendChild(option);
+      const checkboxLabel = document.createElement('label');
+      checkboxLabel.className = 'checkbox-label project-checkbox-item';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'project-checkbox-input';
+      checkbox.value = String(project.id);
+      checkbox.dataset.projectId = String(project.id);
+      checkbox.checked = selectedProjectIds.has(String(project.id));
+
+      const checkboxText = document.createElement('span');
+      checkboxText.textContent = project.identifier ? `${project.name} (${project.identifier})` : project.name;
+
+      checkboxLabel.appendChild(checkbox);
+      checkboxLabel.appendChild(checkboxText);
+      projectSelection.appendChild(checkboxLabel);
     });
 
     this.updateNotificationFocusControlState();
   }
 
   updateNotificationFocusControlState() {
-    const projectSelect = document.getElementById('notificationProjectSelection');
-    if (projectSelect) {
-      projectSelect.disabled = this.getSelectedNotificationProjectRuleMode() === 'all'
+    const projectSelection = document.getElementById('notificationProjectSelection');
+    if (projectSelection) {
+      const shouldDisableProjectSelection = this.getSelectedNotificationProjectRuleMode() === 'all'
         || this.availableNotificationProjects.length === 0;
+      if (shouldDisableProjectSelection) {
+        projectSelection.classList.add('disabled');
+      } else {
+        projectSelection.classList.remove('disabled');
+      }
+      projectSelection.setAttribute('aria-disabled', shouldDisableProjectSelection ? 'true' : 'false');
+
+      Array.from(projectSelection.querySelectorAll('.project-checkbox-input')).forEach(checkbox => {
+        checkbox.disabled = shouldDisableProjectSelection;
+      });
     }
 
     const quietHoursEnabled = document.getElementById('notificationQuietHoursEnabled')?.checked === true;

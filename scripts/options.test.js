@@ -19,6 +19,15 @@ function createMockElement(overrides = {}) {
     removeEventListener: jest.fn(),
     appendChild: jest.fn((child) => {
       element.children.push(child);
+      if (
+        child
+        && (
+          child.type === 'checkbox'
+          || (typeof child.className === 'string' && child.className.includes('project-checkbox-input'))
+        )
+      ) {
+        element.projectCheckboxInput = child;
+      }
       if (Array.isArray(element.options)) {
         element.options.push(child);
       }
@@ -41,8 +50,34 @@ function createMockElement(overrides = {}) {
       add: jest.fn(),
       remove: jest.fn()
     },
+    setAttribute: jest.fn((name, value) => {
+      element[name] = value;
+    }),
     ...overrides
   };
+
+  return element;
+}
+
+function createProjectSelectionElement() {
+  const element = createMockElement({
+    children: []
+  });
+
+  element.querySelectorAll = jest.fn((selector) => {
+    if (selector === '.project-checkbox-input') {
+      return element.children
+        .map(child => child.projectCheckboxInput)
+        .filter(Boolean);
+    }
+
+    return [];
+  });
+
+  element.appendChild = jest.fn((child) => {
+    element.children.push(child);
+    return child;
+  });
 
   return element;
 }
@@ -118,12 +153,7 @@ describe('OptionsManager', () => {
       notificationProjectRuleModeInclude: createMockElement({ checked: false }),
       notificationProjectRuleModeExclude: createMockElement({ checked: false }),
       refreshNotificationProjectsBtn: createMockElement(),
-      notificationProjectSelection: createMockElement({
-        options: [
-          { value: '1', selected: true },
-          { value: '2', selected: false }
-        ]
-      }),
+      notificationProjectSelection: createProjectSelectionElement(),
       notificationProjectStatus: createMockElement(),
       notificationChangeFilterStatus: createMockElement({ checked: true }),
       notificationChangeFilterAssignee: createMockElement({ checked: true }),
@@ -442,15 +472,47 @@ describe('OptionsManager', () => {
       action: 'getNotificationProjects',
       forceRefresh: false
     });
-    expect(elements.notificationProjectSelection.options).toHaveLength(2);
-    expect(elements.notificationProjectSelection.options[0]).toMatchObject({
+    expect(elements.notificationProjectSelection.children).toHaveLength(2);
+    expect(elements.notificationProjectSelection.children[0].projectCheckboxInput).toMatchObject({
       value: '1',
-      text: 'API (api)'
+      checked: false
     });
-    expect(elements.notificationProjectSelection.options[1]).toMatchObject({
+    expect(elements.notificationProjectSelection.children[0].children[1].textContent).toBe('API (api)');
+    expect(elements.notificationProjectSelection.children[1].projectCheckboxInput).toMatchObject({
       value: '2',
-      text: 'Web (web)'
+      checked: false
     });
+    expect(elements.notificationProjectSelection.children[1].children[1].textContent).toBe('Web (web)');
+  });
+
+  test('saves included project ids from the checkbox list', async () => {
+    elements.notificationProjectRuleModeAll.checked = false;
+    elements.notificationProjectRuleModeInclude.checked = true;
+    manager.availableNotificationProjects = [
+      { id: 2, name: 'Web', identifier: 'web' },
+      { id: 1, name: 'API', identifier: 'api' }
+    ];
+    manager.settings.notificationProjectRules = {
+      mode: 'include',
+      includeProjectIds: [1],
+      excludeProjectIds: []
+    };
+    manager.renderNotificationProjectOptions();
+    global.chrome.storage.sync.set.mockResolvedValue(undefined);
+
+    const projectCheckboxes = elements.notificationProjectSelection.querySelectorAll('.project-checkbox-input');
+    projectCheckboxes.find(checkbox => checkbox.value === '1').checked = true;
+    projectCheckboxes.find(checkbox => checkbox.value === '2').checked = false;
+
+    await manager.saveNotificationSettings();
+
+    expect(global.chrome.storage.sync.set).toHaveBeenCalledWith(expect.objectContaining({
+      notificationProjectRules: {
+        mode: 'include',
+        includeProjectIds: [1],
+        excludeProjectIds: []
+      }
+    }));
   });
 
   test('stops connection tests when Redmine URL is invalid', async () => {
