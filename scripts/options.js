@@ -1208,15 +1208,15 @@ class OptionsManager {
     const configManagerClass = this.getConfigManagerClass();
 
     if (quietHoursEnabled) {
-      const qhDefaults = configManagerClass?.getDefaultNotificationQuietHours?.();
-      if (qhDefaults) {
-        if (!configManagerClass.isValidTimeString(quietHoursStartEl.value)) {
-          quietHoursStartEl.value = qhDefaults.start;
-        }
-        if (!configManagerClass.isValidTimeString(quietHoursEndEl.value)) {
-          quietHoursEndEl.value = qhDefaults.end;
-        }
+      const isValidQuietHoursTime = typeof configManagerClass?.isValidTimeString === 'function'
+        ? value => configManagerClass.isValidTimeString(value)
+        : value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+
+      if (!isValidQuietHoursTime(quietHoursStartEl.value) || !isValidQuietHoursTime(quietHoursEndEl.value)) {
+        this.showStatus('notificationsStatus', 'error', this.translate('quietHoursInvalidTime'));
+        return;
       }
+
       if (quietHoursStartEl.value === quietHoursEndEl.value) {
         this.showStatus('notificationsStatus', 'error', this.translate('quietHoursStartEndSame'));
         return;
