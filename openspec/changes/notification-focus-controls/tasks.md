@@ -32,6 +32,6 @@
 
 ## 6. Tests and Documentation
 
-- [ ] 6.1 Add background tests for project-rule evaluation, change-type filtering, quiet-hours suppression, and bundling behavior.
-- [ ] 6.2 Add options and popup tests for settings persistence, validation, and bundled-notification rendering.
-- [ ] 6.3 Update README documentation to explain notification focus controls, quiet hours, and bundling behavior.
+- [x] 6.1 Add background tests for project-rule evaluation, change-type filtering, quiet-hours suppression, and bundling behavior.
+- [x] 6.2 Add options and popup tests for settings persistence, validation, and bundled-notification rendering.
+- [x] 6.3 Update README documentation to explain notification focus controls, quiet hours, and bundling behavior.

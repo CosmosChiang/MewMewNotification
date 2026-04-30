@@ -27,6 +27,7 @@ Below are screenshots of the main MewMewNotification interfaces:
 - Update digest summaries for status, priority, assignee, and subject changes
 - Expandable **More actions** panel for quick reply, status changes, and assignee updates
 - Project filter: show only issues assigned to you, or include watched issues
+- Notification focus controls: per-project include/exclude rules, change-type filters, quiet hours, and short-window bundling
 - Auto-detect issue updates with intelligent notification management
 - Badge counter for unread notification count
 
@@ -58,6 +59,11 @@ Below are screenshots of the main MewMewNotification interfaces:
     available.
   - Action availability follows Redmine permissions; if your role cannot perform an
     action, the popup shows a permission warning instead of silently failing.
+- Supports notification focus controls:
+  - **Project rules**: Notify for all projects, or only the included / excluded project set.
+  - **Change-type filters**: Control status, assignee, priority, comment or journal activity, and generic updates separately.
+  - **Quiet hours**: Suppress desktop interruptions during a chosen time window while keeping unread state and retained history.
+  - **Short-window bundling**: Merge bursty updates for the same issue into one retained notification with an accumulated digest.
 - Manual refresh supported
 - Retry on notification failure and error prompts
 
@@ -110,6 +116,12 @@ A: Log in to Redmine, click "My Account" in the top right, and find the API Key 
 
 A: Check that your Redmine URL and API Key are correct, and that the extension has host access for the configured Redmine origin. You can click "Test Connection" to verify your settings.
 If you upgraded from an older release, open Options and save the Redmine settings again.
+
+If notification focus controls are enabled, also check that:
+
+- the issue's project is not excluded, or is included in the allow list
+- the matching change type is still enabled
+- the current time is outside quiet hours (quiet hours still keep retained history)
 
 ### Q: How do I only see issues assigned to me?
 
