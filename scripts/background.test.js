@@ -744,6 +744,202 @@ describe('NotificationManager host permission recovery', () => {
     getIssuesSpy.mockRestore();
   });
 
+  test('bundles repeated issue updates within the configured window', async () => {
+    const chromeMock = createChromeMock();
+    const bundledRecordId = `issue_12_${Date.parse('2026-04-29T08:05:00.000Z')}`;
+    chromeMock.storage.local.get = createNotificationCheckLocalGet({
+      issueStates: {
+        12: {
+          subject: 'Bundled issue',
+          status: 'In Progress',
+          priority: 'Normal',
+          assigneeId: 1,
+          assigneeName: 'Alice',
+          updatedOn: Date.parse('2026-04-29T08:05:00.000Z')
+        }
+      },
+      notificationHistory: [
+        {
+          id: bundledRecordId,
+          issueId: 12,
+          title: '#12: Bundled issue',
+          project: 'Web',
+          author: 'Alice',
+          status: 'In Progress',
+          priority: 'Normal',
+          projectId: 2,
+          updatedOn: '2026-04-29T08:05:00.000Z',
+          read: false,
+          isUpdated: true,
+          bundleCount: 1,
+          changeSummary: [
+            { field: 'status', from: 'New', to: 'In Progress' }
+          ],
+          lastSeenState: {
+            subject: 'Bundled issue',
+            status: 'In Progress',
+            priority: 'Normal',
+            assigneeId: 1,
+            assigneeName: 'Alice',
+            updatedOn: Date.parse('2026-04-29T08:05:00.000Z')
+          }
+        }
+      ]
+    });
+    const { NotificationManager, RedmineAPI } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    await new Promise(resolve => setImmediate(resolve));
+    manager.settingsLoaded = true;
+    manager.settings = createNotificationManagerSettings({
+      notificationBundling: {
+        enabled: true,
+        windowMinutes: 10
+      }
+    });
+    manager.ensureConfiguredHostAccess = jest.fn().mockResolvedValue(undefined);
+    manager.showDesktopNotification = jest.fn();
+    manager.updateBadge = jest.fn();
+    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssues').mockResolvedValue({
+      issues: [
+        {
+          id: 12,
+          subject: 'Bundled issue',
+          project: { id: 2, name: 'Web' },
+          author: { name: 'Alice' },
+          status: { name: 'In Progress' },
+          priority: { name: 'High' },
+          assigned_to: { id: 1, name: 'Alice' },
+          updated_on: '2026-04-29T08:08:00.000Z'
+        }
+      ],
+      total_count: 1,
+      limit: 50
+    });
+
+    await manager.checkNotifications();
+
+    expect(manager.showDesktopNotification).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: bundledRecordId,
+        bundleCount: 2,
+        updatedOn: new Date('2026-04-29T08:08:00.000Z'),
+        changeSummary: expect.arrayContaining([
+          expect.objectContaining({ field: 'status', from: 'New', to: 'In Progress' }),
+          expect.objectContaining({ field: 'priority', from: 'Normal', to: 'High' })
+        ])
+      })
+    ], 'updated');
+    expect(manager.notifications.size).toBe(1);
+    expect(chromeMock.storage.local.set).toHaveBeenCalledWith({
+      notificationHistory: [
+        expect.objectContaining({
+          id: bundledRecordId,
+          bundleCount: 2,
+          updatedOn: '2026-04-29T08:08:00.000Z'
+        })
+      ]
+    });
+
+    getIssuesSpy.mockRestore();
+  });
+
+  test('keeps updates outside the bundling window as separate retained records', async () => {
+    const chromeMock = createChromeMock();
+    const firstRecordId = `issue_13_${Date.parse('2026-04-29T08:00:00.000Z')}`;
+    const secondRecordId = `issue_13_${Date.parse('2026-04-29T08:12:00.000Z')}`;
+    chromeMock.storage.local.get = createNotificationCheckLocalGet({
+      issueStates: {
+        13: {
+          subject: 'Separate bundled issue',
+          status: 'In Progress',
+          priority: 'Normal',
+          assigneeId: 2,
+          assigneeName: 'Bob',
+          updatedOn: Date.parse('2026-04-29T08:00:00.000Z')
+        }
+      },
+      notificationHistory: [
+        {
+          id: firstRecordId,
+          issueId: 13,
+          title: '#13: Separate bundled issue',
+          project: 'API',
+          author: 'Bob',
+          status: 'In Progress',
+          priority: 'Normal',
+          projectId: 3,
+          updatedOn: '2026-04-29T08:00:00.000Z',
+          read: false,
+          isUpdated: true,
+          bundleCount: 1,
+          changeSummary: [
+            { field: 'status', from: 'New', to: 'In Progress' }
+          ],
+          lastSeenState: {
+            subject: 'Separate bundled issue',
+            status: 'In Progress',
+            priority: 'Normal',
+            assigneeId: 2,
+            assigneeName: 'Bob',
+            updatedOn: Date.parse('2026-04-29T08:00:00.000Z')
+          }
+        }
+      ]
+    });
+    const { NotificationManager, RedmineAPI } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    await new Promise(resolve => setImmediate(resolve));
+    manager.settingsLoaded = true;
+    manager.settings = createNotificationManagerSettings({
+      notificationBundling: {
+        enabled: true,
+        windowMinutes: 5
+      }
+    });
+    manager.ensureConfiguredHostAccess = jest.fn().mockResolvedValue(undefined);
+    manager.showDesktopNotification = jest.fn();
+    manager.updateBadge = jest.fn();
+    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssues').mockResolvedValue({
+      issues: [
+        {
+          id: 13,
+          subject: 'Separate bundled issue',
+          project: { id: 3, name: 'API' },
+          author: { name: 'Bob' },
+          status: { name: 'Resolved' },
+          priority: { name: 'Normal' },
+          assigned_to: { id: 2, name: 'Bob' },
+          updated_on: '2026-04-29T08:12:00.000Z'
+        }
+      ],
+      total_count: 1,
+      limit: 50
+    });
+
+    await manager.checkNotifications();
+
+    expect(manager.showDesktopNotification).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: secondRecordId,
+        bundleCount: 1,
+        changeSummary: [
+          { field: 'status', from: 'In Progress', to: 'Resolved' }
+        ]
+      })
+    ], 'updated');
+    expect(Array.from(manager.notifications.keys())).toEqual(
+      expect.arrayContaining([firstRecordId, secondRecordId])
+    );
+    expect(chromeMock.storage.local.set).toHaveBeenCalledWith({
+      notificationHistory: [
+        expect.objectContaining({ id: secondRecordId, updatedOn: '2026-04-29T08:12:00.000Z' }),
+        expect.objectContaining({ id: firstRecordId, updatedOn: '2026-04-29T08:00:00.000Z' })
+      ]
+    });
+
+    getIssuesSpy.mockRestore();
+  });
+
   test('message handler returns a useful error for non-Error throws', async () => {
     const chromeMock = createChromeMock();
     loadBackgroundModule(chromeMock);

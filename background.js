@@ -1003,6 +1003,9 @@ class NotificationManager {
       url: typeof record.url === 'string' ? record.url : '',
       read: record.read === true,
       isUpdated: record.isUpdated === true,
+      bundleCount: Number.isSafeInteger(record.bundleCount) && record.bundleCount > 0
+        ? record.bundleCount
+        : 1,
       sourceType: typeof record.sourceType === 'string' ? record.sourceType : 'unknown',
       changeSummary: this.normalizeChangeSummary(record.changeSummary),
       lastSeenState: this.normalizeIssueSnapshot(record.lastSeenState)
@@ -1361,9 +1364,12 @@ class NotificationManager {
 
   buildNotificationFromIssue(issue, existingNotification = {}) {
     const lastSeenState = existingNotification.lastSeenState || this.buildIssueSnapshot(issue);
+    const updatedOn = new Date(issue.updated_on);
 
     return {
-      id: `issue_${issue.id}`,
+      id: typeof existingNotification.id === 'string' && existingNotification.id
+        ? existingNotification.id
+        : this.createNotificationRecordId(issue, updatedOn),
       issueId: issue.id,
       title: `#${issue.id}: ${issue.subject}`,
       project: issue.project?.name || this.translate('unknownProject'),
@@ -1373,10 +1379,13 @@ class NotificationManager {
       assigneeId: issue.assigned_to?.id,
       assigneeName: issue.assigned_to?.name || '',
       projectId: issue.project?.id,
-      updatedOn: new Date(issue.updated_on),
+      updatedOn,
       url: `${this.settings.redmineUrl}/issues/${issue.id}`,
       read: existingNotification.read === true,
       isUpdated: existingNotification.isUpdated === true,
+      bundleCount: Number.isSafeInteger(existingNotification.bundleCount) && existingNotification.bundleCount > 0
+        ? existingNotification.bundleCount
+        : 1,
       sourceType: issue.sourceType || existingNotification.sourceType || 'unknown',
       changeSummary: this.normalizeChangeSummary(existingNotification.changeSummary),
       lastSeenState
@@ -1472,6 +1481,104 @@ class NotificationManager {
       start: '22:00',
       end: '08:00'
     };
+  }
+
+  getNotificationBundling() {
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.normalizeNotificationBundling) {
+      return configManagerClass.normalizeNotificationBundling(this.settings?.notificationBundling);
+    }
+
+    return {
+      enabled: false,
+      windowMinutes: 5
+    };
+  }
+
+  createNotificationRecordId(issue, updatedOn = issue?.updated_on) {
+    const normalizedIssueId = Number.isInteger(issue?.id)
+      ? issue.id
+      : Number.parseInt(issue?.issueId, 10);
+    const bundling = this.getNotificationBundling();
+
+    if (!bundling.enabled || !Number.isSafeInteger(normalizedIssueId) || normalizedIssueId <= 0) {
+      return `issue_${normalizedIssueId}`;
+    }
+
+    const updatedTimestamp = updatedOn instanceof Date
+      ? updatedOn.getTime()
+      : Number.isFinite(updatedOn)
+        ? updatedOn
+        : new Date(updatedOn).getTime();
+
+    return `issue_${normalizedIssueId}_${Number.isFinite(updatedTimestamp) ? updatedTimestamp : Date.now()}`;
+  }
+
+  getNotificationsForIssue(issueId) {
+    const normalizedIssueId = Number.parseInt(issueId, 10);
+    if (!Number.isSafeInteger(normalizedIssueId) || normalizedIssueId <= 0) {
+      return [];
+    }
+
+    return Array.from(this.notifications.values())
+      .filter(notification => notification.issueId === normalizedIssueId)
+      .sort((left, right) => right.updatedOn - left.updatedOn);
+  }
+
+  findLatestNotificationForIssue(issueId) {
+    return this.getNotificationsForIssue(issueId)[0];
+  }
+
+  findBundlingTarget(issueId, updatedOn) {
+    const bundling = this.getNotificationBundling();
+    if (!bundling.enabled) {
+      return undefined;
+    }
+
+    const updatedTimestamp = updatedOn instanceof Date
+      ? updatedOn.getTime()
+      : Number.isFinite(updatedOn)
+        ? updatedOn
+        : new Date(updatedOn).getTime();
+    if (!Number.isFinite(updatedTimestamp)) {
+      return undefined;
+    }
+
+    const bundlingWindowMs = bundling.windowMinutes * 60 * 1000;
+
+    return this.getNotificationsForIssue(issueId).find(notification => {
+      const notificationTimestamp = notification.updatedOn instanceof Date
+        ? notification.updatedOn.getTime()
+        : new Date(notification.updatedOn).getTime();
+
+      return Number.isFinite(notificationTimestamp)
+        && updatedTimestamp >= notificationTimestamp
+        && updatedTimestamp - notificationTimestamp <= bundlingWindowMs;
+    });
+  }
+
+  mergeChangeSummary(existingSummary, nextSummary) {
+    const mergedByField = new Map();
+
+    this.normalizeChangeSummary(existingSummary).forEach(change => {
+      mergedByField.set(change.field, { ...change });
+    });
+
+    this.normalizeChangeSummary(nextSummary).forEach(change => {
+      const existingChange = mergedByField.get(change.field);
+      if (!existingChange) {
+        mergedByField.set(change.field, { ...change });
+        return;
+      }
+
+      mergedByField.set(change.field, {
+        field: change.field,
+        from: existingChange.from || change.from,
+        to: change.to
+      });
+    });
+
+    return Array.from(mergedByField.values());
   }
 
   isProjectNotificationEligible(projectId) {
@@ -1624,11 +1731,27 @@ class NotificationManager {
   }
 
   async syncUpdatedIssue(issue) {
-    const notificationId = `issue_${issue.id}`;
-    const existingNotification = this.notifications.get(notificationId) || {};
+    const currentState = this.buildIssueSnapshot(issue);
+    const bundlingTarget = this.findBundlingTarget(issue.id, currentState.updatedOn);
+    const notificationId = bundlingTarget?.id || this.createNotificationRecordId(issue, currentState.updatedOn);
+    const existingNotification = bundlingTarget
+      || this.notifications.get(notificationId)
+      || this.findLatestNotificationForIssue(issue.id)
+      || {};
+    const changeSummary = existingNotification.lastSeenState
+      ? this.buildIssueChangeSummary(existingNotification.lastSeenState, currentState)
+      : [];
     const syncedNotification = this.buildNotificationFromIssue(issue, {
       ...existingNotification,
-      isUpdated: false
+      id: notificationId,
+      isUpdated: false,
+      bundleCount: bundlingTarget
+        ? Math.max(existingNotification.bundleCount || 1, 1) + 1
+        : 1,
+      changeSummary: bundlingTarget
+        ? this.mergeChangeSummary(existingNotification.changeSummary, changeSummary)
+        : changeSummary,
+      lastSeenState: currentState
     });
 
     this.notifications.set(notificationId, syncedNotification);
@@ -1800,13 +1923,17 @@ class NotificationManager {
       const updatedReadNotifications = [...this.settings.readNotifications];
       
       for (const issue of issues) {
-        const notificationId = `issue_${issue.id}`;
-        const existingRecord = existingHistoryById.get(notificationId) || this.notifications.get(notificationId) || {};
-        const isRead = readNotificationsCopy.includes(notificationId) || existingRecord.read === true;
         const currentUpdateTime = new Date(issue.updated_on).getTime();
         const previousState = previousIssueStates[issue.id];
         const currentState = this.buildIssueSnapshot(issue);
         const changeSummary = this.buildIssueChangeSummary(previousState, currentState);
+        const bundlingTarget = this.findBundlingTarget(issue.id, currentUpdateTime);
+        const notificationId = bundlingTarget?.id || this.createNotificationRecordId(issue, currentUpdateTime);
+        const existingRecord = bundlingTarget
+          || existingHistoryById.get(notificationId)
+          || this.notifications.get(notificationId)
+          || {};
+        const isRead = readNotificationsCopy.includes(notificationId) || existingRecord.read === true;
 
         // Check if this is a new issue or an updated issue
         if (!previousState) {
@@ -1817,8 +1944,12 @@ class NotificationManager {
           if (candidate.retain) {
             const notification = this.buildNotificationFromIssue(issue, {
               ...existingRecord,
+              id: notificationId,
               read: isRead,
               isUpdated: false,
+              bundleCount: Number.isSafeInteger(existingRecord.bundleCount) && existingRecord.bundleCount > 0
+                ? existingRecord.bundleCount
+                : 1,
               sourceType: issue.sourceType || existingRecord.sourceType || 'unknown',
               changeSummary: [],
               lastSeenState: currentState
@@ -1842,12 +1973,19 @@ class NotificationManager {
             const candidate = this.evaluateNotificationCandidate(issue, previousState, currentState);
 
             if (candidate.retain) {
+              const isBundledUpdate = bundlingTarget?.id === notificationId;
               const notification = this.buildNotificationFromIssue(issue, {
                 ...existingRecord,
+                id: notificationId,
                 read: isRead,
                 isUpdated: true,
+                bundleCount: isBundledUpdate
+                  ? Math.max(existingRecord.bundleCount || 1, 1) + 1
+                  : 1,
                 sourceType: issue.sourceType || existingRecord.sourceType || 'unknown',
-                changeSummary,
+                changeSummary: isBundledUpdate
+                  ? this.mergeChangeSummary(existingRecord.changeSummary, changeSummary)
+                  : changeSummary,
                 lastSeenState: currentState
               });
 

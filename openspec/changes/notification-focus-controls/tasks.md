@@ -21,9 +21,9 @@
 
 ## 4. Notification Bundling
 
-- [ ] 4.1 Add bundling logic that merges repeated eligible updates for the same issue within the configured window.
-- [ ] 4.2 Preserve newest timestamps and accumulate digest details when a retained notification record is updated by bundling.
-- [ ] 4.3 Keep updates outside the bundling window as separate retained notification records.
+- [x] 4.1 Add bundling logic that merges repeated eligible updates for the same issue within the configured window.
+- [x] 4.2 Preserve newest timestamps and accumulate digest details when a retained notification record is updated by bundling.
+- [x] 4.3 Keep updates outside the bundling window as separate retained notification records.
 
 ## 5. Popup and Runtime Consistency
 
