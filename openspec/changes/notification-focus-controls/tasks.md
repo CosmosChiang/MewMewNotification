@@ -6,11 +6,11 @@
 
 ## 2. Options UI
 
-- [ ] 2.1 Add notification focus controls to `options.html` for per-project include/exclude rules.
-- [ ] 2.2 Add controls for supported change-type filters and a predictable generic-update fallback option.
-- [ ] 2.3 Add quiet-hours configuration inputs and bundling-window selection controls.
-- [ ] 2.4 Update `scripts/options.js` to populate, validate, persist, and reset the new settings.
-- [ ] 2.5 Add localized strings for all new focus-control labels, help text, validation errors, and status messages.
+- [x] 2.1 Add notification focus controls to `options.html` for per-project include/exclude rules.
+- [x] 2.2 Add controls for supported change-type filters and a predictable generic-update fallback option.
+- [x] 2.3 Add quiet-hours configuration inputs and bundling-window selection controls.
+- [x] 2.4 Update `scripts/options.js` to populate, validate, persist, and reset the new settings.
+- [x] 2.5 Add localized strings for all new focus-control labels, help text, validation errors, and status messages.
 
 ## 3. Background Filtering and Classification
 

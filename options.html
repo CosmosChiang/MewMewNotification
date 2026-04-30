@@ -85,6 +85,98 @@
             <option value="100">100</option>
           </select>
         </div>
+        <div class="settings-section">
+          <h3 id="notificationFocusTitle">Notification Focus Controls</h3>
+          <p class="section-help" id="notificationFocusHelp">Reduce interruptions by choosing which projects and update types can notify you.</p>
+
+          <div class="form-group">
+            <label id="notificationProjectRulesLabel">Project rules</label>
+            <p class="section-help" id="notificationProjectRulesHelp">Choose whether all projects notify you, or limit notifications to included or excluded projects.</p>
+            <div class="radio-group">
+              <label class="checkbox-label">
+                <input type="radio" name="notificationProjectRuleMode" id="notificationProjectRuleModeAll" value="all">
+                <span id="notificationProjectRuleModeAllLabel">All configured projects</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="radio" name="notificationProjectRuleMode" id="notificationProjectRuleModeInclude" value="include">
+                <span id="notificationProjectRuleModeIncludeLabel">Only included projects</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="radio" name="notificationProjectRuleMode" id="notificationProjectRuleModeExclude" value="exclude">
+                <span id="notificationProjectRuleModeExcludeLabel">All except excluded projects</span>
+              </label>
+            </div>
+            <div class="inline-action-row">
+              <button id="refreshNotificationProjectsBtn" class="secondary-btn" type="button">Refresh project list</button>
+            </div>
+            <select id="notificationProjectSelection" multiple size="8"></select>
+            <div id="notificationProjectStatus" class="status-message"></div>
+          </div>
+
+          <div class="form-group">
+            <label id="notificationChangeFiltersTitle">Change-type filters</label>
+            <p class="section-help" id="notificationChangeFiltersHelp">Choose which kinds of issue updates are important enough to surface.</p>
+            <div class="stacked-checkboxes">
+              <label class="checkbox-label">
+                <input type="checkbox" id="notificationChangeFilterStatus">
+                <span id="notificationChangeFilterStatusLabel">Status changes</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="notificationChangeFilterAssignee">
+                <span id="notificationChangeFilterAssigneeLabel">Assignee changes</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="notificationChangeFilterPriority">
+                <span id="notificationChangeFilterPriorityLabel">Priority changes</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="notificationChangeFilterComment">
+                <span id="notificationChangeFilterCommentLabel">Comment or journal activity</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="notificationChangeFilterGeneric">
+                <span id="notificationChangeFilterGenericLabel">Keep generic updates when the change type is uncertain</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label id="notificationQuietHoursTitle">Quiet hours</label>
+            <p class="section-help" id="notificationQuietHoursHelp">Suppress interruptions during focus time while still keeping updates in history.</p>
+            <label class="checkbox-label">
+              <input type="checkbox" id="notificationQuietHoursEnabled">
+              <span id="notificationQuietHoursEnabledLabel">Enable quiet hours</span>
+            </label>
+            <div class="inline-field-row">
+              <div class="inline-field">
+                <label for="notificationQuietHoursStart" id="notificationQuietHoursStartLabel">Start</label>
+                <input type="time" id="notificationQuietHoursStart">
+              </div>
+              <div class="inline-field">
+                <label for="notificationQuietHoursEnd" id="notificationQuietHoursEndLabel">End</label>
+                <input type="time" id="notificationQuietHoursEnd">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label id="notificationBundlingTitle">Bundling</label>
+            <p class="section-help" id="notificationBundlingHelp">Merge bursty updates for the same issue into one retained notification.</p>
+            <label class="checkbox-label">
+              <input type="checkbox" id="notificationBundlingEnabled">
+              <span id="notificationBundlingEnabledLabel">Enable short-window bundling</span>
+            </label>
+            <div class="inline-field">
+              <label for="notificationBundlingWindow" id="notificationBundlingWindowLabel">Bundling window</label>
+              <select id="notificationBundlingWindow">
+                <option value="5">5 minutes</option>
+                <option value="10">10 minutes</option>
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+              </select>
+            </div>
+          </div>
+        </div>
         <div class="section-footer">
           <button id="saveNotificationsBtn" class="save-section-btn">Save Notification Settings</button>
         </div>

@@ -89,6 +89,7 @@ label {
 
 input[type="url"],
 input[type="password"],
+input[type="time"],
 input[type="number"],
 select {
   width: 100%;
@@ -102,6 +103,7 @@ select {
 
 input[type="url"]:focus,
 input[type="password"]:focus,
+input[type="time"]:focus,
 input[type="number"]:focus,
 select:focus {
   outline: none;
@@ -127,6 +129,81 @@ small {
   width: auto;
   margin-right: 8px;
   transform: scale(1.2);
+}
+
+.checkbox-label input[type="radio"] {
+  width: auto;
+  margin-right: 8px;
+  transform: scale(1.1);
+}
+
+.settings-section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #e9ecef;
+}
+
+.settings-section h3 {
+  font-size: 20px;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.section-help {
+  margin-bottom: 16px;
+  color: #666;
+}
+
+.radio-group,
+.stacked-checkboxes {
+  display: grid;
+  gap: 12px;
+}
+
+.inline-action-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.inline-field-row {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-top: 12px;
+}
+
+.inline-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+#notificationProjectSelection {
+  min-height: 220px;
+}
+
+.secondary-btn {
+  padding: 10px 16px;
+  border: 1px solid #ced4da;
+  border-radius: 8px;
+  background: #fff;
+  color: #495057;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.secondary-btn:hover {
+  background: #f8f9fa;
+  border-color: #adb5bd;
+}
+
+.secondary-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .test-btn,
@@ -276,6 +353,24 @@ small {
 .about-content ul {
   margin-left: 20px;
   margin-bottom: 16px;
+}
+
+@media (max-width: 640px) {
+  .tabs {
+    flex-wrap: wrap;
+  }
+
+  .tab-button {
+    min-width: 50%;
+  }
+
+  .inline-action-row {
+    justify-content: stretch;
+  }
+
+  .secondary-btn {
+    width: 100%;
+  }
 }
 
 .about-content li {

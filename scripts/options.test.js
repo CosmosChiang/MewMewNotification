@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const { ConfigManager } = require('./shared/config-manager.js');
 
 function createMockElement(overrides = {}) {
-  return {
+  const element = {
     value: '',
     checked: false,
     textContent: '',
@@ -14,12 +14,37 @@ function createMockElement(overrides = {}) {
     style: { display: 'none' },
     dataset: {},
     options: [],
+    children: [],
     addEventListener: jest.fn(),
     removeEventListener: jest.fn(),
-    appendChild: jest.fn(),
-    insertBefore: jest.fn(),
+    appendChild: jest.fn((child) => {
+      element.children.push(child);
+      if (Array.isArray(element.options)) {
+        element.options.push(child);
+      }
+      return child;
+    }),
+    insertBefore: jest.fn((child, before) => {
+      element.children.push(child);
+      if (Array.isArray(element.options)) {
+        const targetIndex = element.options.indexOf(before);
+        if (targetIndex === -1) {
+          element.options.push(child);
+        } else {
+          element.options.splice(targetIndex, 0, child);
+        }
+      }
+      return child;
+    }),
+    querySelectorAll: jest.fn(() => []),
+    classList: {
+      add: jest.fn(),
+      remove: jest.fn()
+    },
     ...overrides
   };
+
+  return element;
 }
 
 function createDocument(elements) {
@@ -89,6 +114,35 @@ describe('OptionsManager', () => {
       enableSound: createMockElement({ checked: false }),
       onlyMyProjects: createMockElement({ checked: true }),
       includeWatchedIssues: createMockElement({ checked: false }),
+      notificationProjectRuleModeAll: createMockElement({ checked: true }),
+      notificationProjectRuleModeInclude: createMockElement({ checked: false }),
+      notificationProjectRuleModeExclude: createMockElement({ checked: false }),
+      refreshNotificationProjectsBtn: createMockElement(),
+      notificationProjectSelection: createMockElement({
+        options: [
+          { value: '1', selected: true },
+          { value: '2', selected: false }
+        ]
+      }),
+      notificationProjectStatus: createMockElement(),
+      notificationChangeFilterStatus: createMockElement({ checked: true }),
+      notificationChangeFilterAssignee: createMockElement({ checked: true }),
+      notificationChangeFilterPriority: createMockElement({ checked: true }),
+      notificationChangeFilterComment: createMockElement({ checked: false }),
+      notificationChangeFilterGeneric: createMockElement({ checked: true }),
+      notificationQuietHoursEnabled: createMockElement({ checked: true }),
+      notificationQuietHoursStart: createMockElement({ value: '22:00' }),
+      notificationQuietHoursEnd: createMockElement({ value: '08:00' }),
+      notificationBundlingEnabled: createMockElement({ checked: true }),
+      notificationBundlingWindow: createMockElement({
+        value: '15',
+        options: [
+          { value: '5', text: '5 minutes' },
+          { value: '10', text: '10 minutes' },
+          { value: '15', text: '15 minutes' },
+          { value: '30', text: '30 minutes' }
+        ]
+      }),
       languageSelect: createMockElement({ value: 'en', options: [] })
     };
 
@@ -139,7 +193,28 @@ describe('OptionsManager', () => {
       onlyMyProjects: true,
       includeWatchedIssues: false,
       maxNotifications: 50,
-      language: 'en'
+      language: 'en',
+      notificationProjectRules: {
+        mode: 'all',
+        includeProjectIds: [],
+        excludeProjectIds: []
+      },
+      notificationChangeFilters: {
+        status: true,
+        assignee: true,
+        priority: true,
+        comment: true,
+        generic: true
+      },
+      notificationQuietHours: {
+        enabled: false,
+        start: '22:00',
+        end: '08:00'
+      },
+      notificationBundling: {
+        enabled: false,
+        windowMinutes: 5
+      }
     };
   });
 
@@ -200,7 +275,28 @@ describe('OptionsManager', () => {
       enableSound: false,
       onlyMyProjects: true,
       includeWatchedIssues: false,
-      maxNotifications: 100
+      maxNotifications: 100,
+      notificationProjectRules: {
+        mode: 'all',
+        includeProjectIds: [],
+        excludeProjectIds: []
+      },
+      notificationChangeFilters: {
+        status: true,
+        assignee: true,
+        priority: true,
+        comment: false,
+        generic: true
+      },
+      notificationQuietHours: {
+        enabled: true,
+        start: '22:00',
+        end: '08:00'
+      },
+      notificationBundling: {
+        enabled: true,
+        windowMinutes: 15
+      }
     });
     expect(manager.settings).toMatchObject({
       checkInterval: 30,
@@ -208,7 +304,11 @@ describe('OptionsManager', () => {
       enableSound: false,
       onlyMyProjects: true,
       includeWatchedIssues: false,
-      maxNotifications: 100
+      maxNotifications: 100,
+      notificationBundling: {
+        enabled: true,
+        windowMinutes: 15
+      }
     });
     expect(elements.notificationsStatus.className).toBe('status-message success');
     expect(elements.notificationsStatus.textContent).toBe('notificationSettingsSaved');
@@ -311,6 +411,46 @@ describe('OptionsManager', () => {
     expect(global.chrome.storage.sync.set).not.toHaveBeenCalled();
     expect(elements.notificationsStatus.className).toBe('status-message error');
     expect(elements.notificationsStatus.textContent).toBe('numberOutOfRange');
+  });
+
+  test('shows validation errors when quiet hours start and end match', async () => {
+    elements.notificationQuietHoursEnabled.checked = true;
+    elements.notificationQuietHoursStart.value = '09:00';
+    elements.notificationQuietHoursEnd.value = '09:00';
+
+    await manager.saveNotificationSettings();
+
+    expect(global.chrome.storage.sync.set).not.toHaveBeenCalled();
+    expect(elements.notificationsStatus.className).toBe('status-message error');
+    expect(elements.notificationsStatus.textContent).toBe('quietHoursStartEndSame');
+  });
+
+  test('loads notification projects from the background and renders sorted options', async () => {
+    manager.settings.redmineUrl = 'https://redmine.example.com';
+    manager.settings.apiKey = 'valid-api-key-123';
+    global.chrome.runtime.sendMessage.mockResolvedValue({
+      success: true,
+      projects: [
+        { id: 2, name: 'Web', identifier: 'web' },
+        { id: 1, name: 'API', identifier: 'api' }
+      ]
+    });
+
+    await manager.loadNotificationProjects();
+
+    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith({
+      action: 'getNotificationProjects',
+      forceRefresh: false
+    });
+    expect(elements.notificationProjectSelection.options).toHaveLength(2);
+    expect(elements.notificationProjectSelection.options[0]).toMatchObject({
+      value: '1',
+      text: 'API (api)'
+    });
+    expect(elements.notificationProjectSelection.options[1]).toMatchObject({
+      value: '2',
+      text: 'Web (web)'
+    });
   });
 
   test('stops connection tests when Redmine URL is invalid', async () => {
