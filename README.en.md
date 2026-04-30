@@ -77,7 +77,8 @@ Below are screenshots of the main MewMewNotification interfaces:
    - Click "Load unpacked" and select the project folder
 4. After making changes, simply refresh the extension.
 5. To package for release:
-    - Create a ZIP that only contains the files required to run the extension, such as `manifest.json`, the HTML files, `background.js`, `scripts/`, `styles/`, `icons/`, and `_locales/`
+    - Run `.\tools\package-extension.ps1` in PowerShell
+    - It creates `dist\mewmew-notification-extension.zip` containing only the files required by the Chrome extension
     - Upload to Chrome Web Store or distribute manually
 
 ## Testing & CI/CD
