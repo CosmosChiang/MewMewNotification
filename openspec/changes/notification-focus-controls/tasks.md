@@ -14,10 +14,10 @@
 
 ## 3. Background Filtering and Classification
 
-- [ ] 3.1 Classify fetched Redmine issue updates into the supported change categories using available issue snapshot data.
-- [ ] 3.2 Apply project allow/deny rules before surfacing extension notifications.
-- [ ] 3.3 Apply change-type filters with consistent fallback behavior for unclassified updates.
-- [ ] 3.4 Apply quiet-hours suppression so interruption-oriented alerts are skipped while retained history stays intact.
+- [x] 3.1 Classify fetched Redmine issue updates into the supported change categories using available issue snapshot data.
+- [x] 3.2 Apply project allow/deny rules before surfacing extension notifications.
+- [x] 3.3 Apply change-type filters with consistent fallback behavior for unclassified updates.
+- [x] 3.4 Apply quiet-hours suppression so interruption-oriented alerts are skipped while retained history stays intact.
 
 ## 4. Notification Bundling
 

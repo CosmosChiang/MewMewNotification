@@ -1433,6 +1433,185 @@ class NotificationManager {
     return changes;
   }
 
+  getNotificationProjectRules() {
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.normalizeNotificationProjectRules) {
+      return configManagerClass.normalizeNotificationProjectRules(this.settings?.notificationProjectRules);
+    }
+
+    return {
+      mode: 'all',
+      includeProjectIds: [],
+      excludeProjectIds: []
+    };
+  }
+
+  getNotificationChangeFilters() {
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.normalizeNotificationChangeFilters) {
+      return configManagerClass.normalizeNotificationChangeFilters(this.settings?.notificationChangeFilters);
+    }
+
+    return {
+      status: true,
+      assignee: true,
+      priority: true,
+      comment: true,
+      generic: true
+    };
+  }
+
+  getNotificationQuietHours() {
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.normalizeNotificationQuietHours) {
+      return configManagerClass.normalizeNotificationQuietHours(this.settings?.notificationQuietHours);
+    }
+
+    return {
+      enabled: false,
+      start: '22:00',
+      end: '08:00'
+    };
+  }
+
+  isProjectNotificationEligible(projectId) {
+    const projectRules = this.getNotificationProjectRules();
+    const normalizedProjectId = Number.parseInt(projectId, 10);
+    const hasProjectId = Number.isSafeInteger(normalizedProjectId) && normalizedProjectId > 0;
+
+    if (projectRules.mode === 'include') {
+      return hasProjectId && projectRules.includeProjectIds.includes(normalizedProjectId);
+    }
+
+    if (projectRules.mode === 'exclude') {
+      return !hasProjectId || !projectRules.excludeProjectIds.includes(normalizedProjectId);
+    }
+
+    return true;
+  }
+
+  hasExplicitCommentActivity(issue) {
+    if (!issue || typeof issue !== 'object') {
+      return false;
+    }
+
+    const directNoteFields = ['notes', 'last_notes', 'lastNotes', 'journalNotes', 'lastJournalNotes'];
+    if (directNoteFields.some(field => typeof issue[field] === 'string' && issue[field].trim())) {
+      return true;
+    }
+
+    if (!Array.isArray(issue.journals)) {
+      return false;
+    }
+
+    return issue.journals.some(journal => (
+      journal
+      && typeof journal === 'object'
+      && typeof journal.notes === 'string'
+      && journal.notes.trim()
+    ));
+  }
+
+  classifyIssueUpdate(previousState, currentState, issue) {
+    const changeSummary = this.buildIssueChangeSummary(previousState, currentState);
+    const categories = new Set();
+
+    changeSummary.forEach(change => {
+      if (change.field === 'status' || change.field === 'assignee' || change.field === 'priority') {
+        categories.add(change.field);
+      }
+    });
+
+    if (this.hasExplicitCommentActivity(issue)) {
+      categories.add('comment');
+    }
+
+    if (categories.size === 0) {
+      categories.add('generic');
+    }
+
+    return Array.from(categories);
+  }
+
+  areNotificationChangeCategoriesEnabled(changeCategories) {
+    const changeFilters = this.getNotificationChangeFilters();
+    const normalizedCategories = Array.isArray(changeCategories) && changeCategories.length > 0
+      ? changeCategories
+      : ['generic'];
+
+    return normalizedCategories.some(category => {
+      if (Object.prototype.hasOwnProperty.call(changeFilters, category)) {
+        return changeFilters[category] !== false;
+      }
+
+      return changeFilters.generic !== false;
+    });
+  }
+
+  isWithinQuietHours(referenceTime = new Date()) {
+    const quietHours = this.getNotificationQuietHours();
+    if (!quietHours.enabled) {
+      return false;
+    }
+
+    const [startHour, startMinute] = quietHours.start.split(':').map(value => Number.parseInt(value, 10));
+    const [endHour, endMinute] = quietHours.end.split(':').map(value => Number.parseInt(value, 10));
+    const startTotalMinutes = (startHour * 60) + startMinute;
+    const endTotalMinutes = (endHour * 60) + endMinute;
+
+    if (startTotalMinutes === endTotalMinutes) {
+      return false;
+    }
+
+    const currentTotalMinutes = (referenceTime.getHours() * 60) + referenceTime.getMinutes();
+
+    if (startTotalMinutes < endTotalMinutes) {
+      return currentTotalMinutes >= startTotalMinutes && currentTotalMinutes < endTotalMinutes;
+    }
+
+    return currentTotalMinutes >= startTotalMinutes || currentTotalMinutes < endTotalMinutes;
+  }
+
+  evaluateNotificationCandidate(issue, previousState, currentState) {
+    if (!this.isProjectNotificationEligible(issue?.project?.id)) {
+      return {
+        retain: false,
+        deliver: false,
+        reason: 'project'
+      };
+    }
+
+    if (!previousState) {
+      const quietHoursSuppressed = this.isWithinQuietHours();
+
+      return {
+        retain: true,
+        deliver: !quietHoursSuppressed,
+        quietHoursSuppressed,
+        changeCategories: []
+      };
+    }
+
+    const changeCategories = this.classifyIssueUpdate(previousState, currentState, issue);
+    if (!this.areNotificationChangeCategoriesEnabled(changeCategories)) {
+      return {
+        retain: false,
+        deliver: false,
+        reason: 'change-filter',
+        changeCategories
+      };
+    }
+
+    const quietHoursSuppressed = this.isWithinQuietHours();
+
+    return {
+      retain: true,
+      deliver: !quietHoursSuppressed,
+      quietHoursSuppressed,
+      changeCategories
+    };
+  }
+
   async persistIssueState(issue) {
     const result = this.normalizeStorageResult(
       await chrome.storage.local.get(['issueStates'])
@@ -1608,6 +1787,7 @@ class NotificationManager {
       const previousIssueStates = result.issueStates || {};
       const existingHistory = await this.loadNotificationHistory();
       const existingHistoryById = new Map(existingHistory.map(record => [record.id, record]));
+      this.notifications = new Map(existingHistory.map(record => [record.id, record]));
 
       console.log('Previous issue states count:', Object.keys(previousIssueStates).length);
       console.log('Current issues count:', issues.length);
@@ -1627,23 +1807,28 @@ class NotificationManager {
         const previousState = previousIssueStates[issue.id];
         const currentState = this.buildIssueSnapshot(issue);
         const changeSummary = this.buildIssueChangeSummary(previousState, currentState);
-        
-        const notification = this.buildNotificationFromIssue(issue, {
-          ...existingRecord,
-          read: isRead,
-          isUpdated: false,
-          sourceType: issue.sourceType || existingRecord.sourceType || 'unknown',
-          changeSummary: [],
-          lastSeenState: currentState
-        });
 
         // Check if this is a new issue or an updated issue
         if (!previousState) {
           // New issue
           console.log(`New issue detected: ${issue.id}`);
-          const hasSeenBefore = await this.hasSeenNotification(notificationId);
-          if (!isRead && !hasSeenBefore) {
-            newNotifications.push(notification);
+          const candidate = this.evaluateNotificationCandidate(issue, previousState, currentState);
+
+          if (candidate.retain) {
+            const notification = this.buildNotificationFromIssue(issue, {
+              ...existingRecord,
+              read: isRead,
+              isUpdated: false,
+              sourceType: issue.sourceType || existingRecord.sourceType || 'unknown',
+              changeSummary: [],
+              lastSeenState: currentState
+            });
+            this.notifications.set(notificationId, notification);
+
+            const hasSeenBefore = await this.hasSeenNotification(notificationId);
+            if (!isRead && !hasSeenBefore && candidate.deliver) {
+              newNotifications.push(notification);
+            }
           }
         } else {
           // Existing issue - check for updates
@@ -1654,24 +1839,36 @@ class NotificationManager {
               previous: new Date(previousUpdateTime),
               current: new Date(currentUpdateTime)
             });
-            notification.isUpdated = true;
-            notification.changeSummary = changeSummary;
-            
-            // If the issue was previously read but now updated, show notification again
-            if (isRead) {
-              // Remove from read notifications to make it appear as unread
-              const readIndex = updatedReadNotifications.indexOf(notificationId);
-              if (readIndex > -1) {
-                updatedReadNotifications.splice(readIndex, 1);
-                notification.read = false;
+            const candidate = this.evaluateNotificationCandidate(issue, previousState, currentState);
+
+            if (candidate.retain) {
+              const notification = this.buildNotificationFromIssue(issue, {
+                ...existingRecord,
+                read: isRead,
+                isUpdated: true,
+                sourceType: issue.sourceType || existingRecord.sourceType || 'unknown',
+                changeSummary,
+                lastSeenState: currentState
+              });
+
+              // If the issue was previously read but now updated, show notification again
+              if (isRead) {
+                // Remove from read notifications to make it appear as unread
+                const readIndex = updatedReadNotifications.indexOf(notificationId);
+                if (readIndex > -1) {
+                  updatedReadNotifications.splice(readIndex, 1);
+                  notification.read = false;
+                }
+              }
+
+              this.notifications.set(notificationId, notification);
+
+              if (candidate.deliver) {
+                updatedNotifications.push(notification);
               }
             }
-            
-            updatedNotifications.push(notification);
           }
         }
-
-        this.notifications.set(notificationId, notification);
 
         // Update the issue state in storage
         previousIssueStates[issue.id] = currentState;

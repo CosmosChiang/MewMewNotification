@@ -120,6 +120,69 @@ function loadBackgroundModule(chromeMock) {
   return sandbox.module.exports;
 }
 
+function createNotificationCheckLocalGet({
+  lastSyncTime,
+  issueStates = {},
+  notificationHistory = [],
+  seenNotifications = []
+} = {}) {
+  return jest.fn().mockImplementation(async keys => {
+    if (Array.isArray(keys) && keys.includes('lastSyncTime')) {
+      return lastSyncTime ? { lastSyncTime } : {};
+    }
+
+    if (Array.isArray(keys) && keys.includes('issueStates')) {
+      return { issueStates };
+    }
+
+    if (Array.isArray(keys) && keys.includes('notificationHistory')) {
+      return { notificationHistory };
+    }
+
+    if (Array.isArray(keys) && keys.includes('seenNotifications')) {
+      return { seenNotifications };
+    }
+
+    return {};
+  });
+}
+
+function createNotificationManagerSettings(overrides = {}) {
+  return {
+    redmineUrl: 'https://redmine.example.com',
+    apiKey: 'valid-api-key-123',
+    checkInterval: 15,
+    enableNotifications: true,
+    enableSound: true,
+    maxNotifications: 50,
+    readNotifications: [],
+    onlyMyProjects: true,
+    includeWatchedIssues: false,
+    notificationProjectRules: {
+      mode: 'all',
+      includeProjectIds: [],
+      excludeProjectIds: []
+    },
+    notificationChangeFilters: {
+      status: true,
+      assignee: true,
+      priority: true,
+      comment: true,
+      generic: true
+    },
+    notificationQuietHours: {
+      enabled: false,
+      start: '22:00',
+      end: '08:00'
+    },
+    notificationBundling: {
+      enabled: false,
+      windowMinutes: 5
+    },
+    ...overrides
+  };
+}
+
 describe('NotificationManager host permission recovery', () => {
   afterEach(() => {
     delete global.chrome;
@@ -462,6 +525,223 @@ describe('NotificationManager host permission recovery', () => {
       { field: 'priority', from: 'Normal', to: 'High' },
       { field: 'assignee', from: 'Alice', to: 'Bob' }
     ]);
+  });
+
+  test('classifies explicit journal note activity as comment and falls back to generic for unknown updates', () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    const previousState = {
+      subject: 'Investigate alert fatigue',
+      status: 'Open',
+      priority: 'Normal',
+      assigneeId: 1,
+      assigneeName: 'Alice',
+      updatedOn: 1
+    };
+    const currentState = {
+      ...previousState,
+      updatedOn: 2
+    };
+
+    expect(manager.classifyIssueUpdate(previousState, currentState, {
+      journals: [{ notes: 'Added details for triage' }]
+    })).toEqual(['comment']);
+    expect(manager.classifyIssueUpdate(previousState, currentState, {})).toEqual(['generic']);
+  });
+
+  test('evaluates both daytime and overnight quiet hours correctly', () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+
+    manager.settings = createNotificationManagerSettings({
+      notificationQuietHours: {
+        enabled: true,
+        start: '09:00',
+        end: '17:00'
+      }
+    });
+    expect(manager.isWithinQuietHours(new Date(2026, 3, 29, 12, 0))).toBe(true);
+    expect(manager.isWithinQuietHours(new Date(2026, 3, 29, 18, 0))).toBe(false);
+
+    manager.settings = createNotificationManagerSettings({
+      notificationQuietHours: {
+        enabled: true,
+        start: '22:00',
+        end: '08:00'
+      }
+    });
+    expect(manager.isWithinQuietHours(new Date(2026, 3, 29, 23, 30))).toBe(true);
+    expect(manager.isWithinQuietHours(new Date(2026, 3, 29, 7, 30))).toBe(true);
+    expect(manager.isWithinQuietHours(new Date(2026, 3, 29, 12, 0))).toBe(false);
+  });
+
+  test('suppresses new issues from projects outside the configured include list', async () => {
+    const chromeMock = createChromeMock();
+    chromeMock.storage.local.get = createNotificationCheckLocalGet();
+    const { NotificationManager, RedmineAPI } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    await new Promise(resolve => setImmediate(resolve));
+    manager.settingsLoaded = true;
+    manager.settings = createNotificationManagerSettings({
+      notificationProjectRules: {
+        mode: 'include',
+        includeProjectIds: [2],
+        excludeProjectIds: []
+      }
+    });
+    manager.ensureConfiguredHostAccess = jest.fn().mockResolvedValue(undefined);
+    manager.showDesktopNotification = jest.fn();
+    manager.updateBadge = jest.fn();
+    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssues').mockResolvedValue({
+      issues: [
+        {
+          id: 7,
+          subject: 'Muted project issue',
+          project: { id: 1, name: 'API' },
+          author: { name: 'Alice' },
+          status: { name: 'New' },
+          priority: { name: 'Normal' },
+          updated_on: '2026-04-29T08:00:00.000Z'
+        }
+      ],
+      total_count: 1,
+      limit: 50
+    });
+
+    await manager.checkNotifications();
+
+    expect(manager.showDesktopNotification).not.toHaveBeenCalled();
+    expect(manager.notifications.size).toBe(0);
+    expect(chromeMock.storage.local.set).toHaveBeenCalledWith(expect.objectContaining({
+      issueStates: expect.objectContaining({
+        7: expect.objectContaining({
+          subject: 'Muted project issue'
+        })
+      })
+    }));
+    expect(chromeMock.storage.local.set).toHaveBeenCalledWith({
+      notificationHistory: []
+    });
+
+    getIssuesSpy.mockRestore();
+  });
+
+  test('retains quiet-hour notifications in history while skipping desktop delivery', async () => {
+    const chromeMock = createChromeMock();
+    chromeMock.storage.local.get = createNotificationCheckLocalGet();
+    const { NotificationManager, RedmineAPI } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    await new Promise(resolve => setImmediate(resolve));
+    manager.settingsLoaded = true;
+    manager.settings = createNotificationManagerSettings({
+      notificationQuietHours: {
+        enabled: true,
+        start: '22:00',
+        end: '08:00'
+      }
+    });
+    manager.ensureConfiguredHostAccess = jest.fn().mockResolvedValue(undefined);
+    manager.showDesktopNotification = jest.fn();
+    manager.updateBadge = jest.fn();
+    jest.spyOn(manager, 'isWithinQuietHours').mockReturnValue(true);
+    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssues').mockResolvedValue({
+      issues: [
+        {
+          id: 8,
+          subject: 'Quiet-hours issue',
+          project: { id: 2, name: 'Web' },
+          author: { name: 'Bob' },
+          status: { name: 'Open' },
+          priority: { name: 'High' },
+          updated_on: '2026-04-29T08:15:00.000Z'
+        }
+      ],
+      total_count: 1,
+      limit: 50
+    });
+
+    await manager.checkNotifications();
+
+    expect(manager.showDesktopNotification).not.toHaveBeenCalled();
+    expect(manager.notifications.get('issue_8')).toEqual(expect.objectContaining({
+      id: 'issue_8',
+      title: '#8: Quiet-hours issue'
+    }));
+    expect(chromeMock.storage.local.set).toHaveBeenCalledWith({
+      notificationHistory: [
+        expect.objectContaining({
+          id: 'issue_8',
+          title: '#8: Quiet-hours issue'
+        })
+      ]
+    });
+    expect(manager.updateBadge).toHaveBeenCalledWith(1);
+
+    getIssuesSpy.mockRestore();
+  });
+
+  test('suppresses updated issues when every detected change category is disabled', async () => {
+    const chromeMock = createChromeMock();
+    chromeMock.storage.local.get = createNotificationCheckLocalGet({
+      issueStates: {
+        9: {
+          subject: 'Status-only update',
+          status: 'New',
+          priority: 'Normal',
+          assigneeId: 1,
+          assigneeName: 'Alice',
+          updatedOn: Date.parse('2026-04-29T08:00:00.000Z')
+        }
+      }
+    });
+    const { NotificationManager, RedmineAPI } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    await new Promise(resolve => setImmediate(resolve));
+    manager.settingsLoaded = true;
+    manager.settings = createNotificationManagerSettings({
+      notificationChangeFilters: {
+        status: false,
+        assignee: true,
+        priority: true,
+        comment: true,
+        generic: false
+      }
+    });
+    manager.ensureConfiguredHostAccess = jest.fn().mockResolvedValue(undefined);
+    manager.showDesktopNotification = jest.fn();
+    manager.updateBadge = jest.fn();
+    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssues').mockResolvedValue({
+      issues: [
+        {
+          id: 9,
+          subject: 'Status-only update',
+          project: { id: 2, name: 'Web' },
+          author: { name: 'Alice' },
+          status: { name: 'Resolved' },
+          priority: { name: 'Normal' },
+          assigned_to: { id: 1, name: 'Alice' },
+          updated_on: '2026-04-29T09:00:00.000Z'
+        }
+      ],
+      total_count: 1,
+      limit: 50
+    });
+
+    await manager.checkNotifications();
+
+    expect(manager.showDesktopNotification).not.toHaveBeenCalled();
+    expect(manager.notifications.size).toBe(0);
+    expect(chromeMock.storage.local.set).toHaveBeenCalledWith(expect.objectContaining({
+      issueStates: expect.objectContaining({
+        9: expect.objectContaining({
+          status: 'Resolved'
+        })
+      })
+    }));
+
+    getIssuesSpy.mockRestore();
   });
 
   test('message handler returns a useful error for non-Error throws', async () => {
