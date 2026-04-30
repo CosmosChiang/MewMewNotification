@@ -263,6 +263,122 @@
     "message": "最大顯示通知數量：",
     "description": "Max notifications field label"
   },
+  "notificationFocusTitle": {
+    "message": "通知聚焦控制",
+    "description": "Title for notification focus settings"
+  },
+  "notificationFocusHelp": {
+    "message": "透過選擇哪些專案與更新類型可以通知你，降低不必要的干擾。",
+    "description": "Help text for notification focus settings"
+  },
+  "notificationProjectRulesLabel": {
+    "message": "專案規則",
+    "description": "Label for notification project rules"
+  },
+  "notificationProjectRulesHelp": {
+    "message": "選擇要讓所有專案通知你，或只限制為納入/排除的專案。",
+    "description": "Help text for notification project rules"
+  },
+  "notificationProjectRuleAll": {
+    "message": "所有已設定專案",
+    "description": "Project rule mode for all projects"
+  },
+  "notificationProjectRuleInclude": {
+    "message": "只限納入的專案",
+    "description": "Project rule mode for included projects only"
+  },
+  "notificationProjectRuleExclude": {
+    "message": "除了排除的專案之外全部通知",
+    "description": "Project rule mode for excluding selected projects"
+  },
+  "refreshProjectList": {
+    "message": "重新整理專案清單",
+    "description": "Button label for refreshing project metadata"
+  },
+  "notificationProjectsLoading": {
+    "message": "正在載入專案清單...",
+    "description": "Loading message for project metadata"
+  },
+  "notificationProjectsUnavailable": {
+    "message": "請先儲存 Redmine 設定，才能載入專案規則清單。",
+    "description": "Message shown when projects cannot be loaded yet"
+  },
+  "notificationProjectsEmpty": {
+    "message": "目前沒有可供設定規則的 Redmine 專案。",
+    "description": "Empty project list message"
+  },
+  "notificationChangeFiltersTitle": {
+    "message": "變更類型篩選",
+    "description": "Title for notification change filters"
+  },
+  "notificationChangeFiltersHelp": {
+    "message": "選擇哪些議題更新類型值得顯示為通知。",
+    "description": "Help text for change-type filters"
+  },
+  "notificationChangeFilterStatus": {
+    "message": "狀態變更",
+    "description": "Checkbox label for status change notifications"
+  },
+  "notificationChangeFilterAssignee": {
+    "message": "指派人員變更",
+    "description": "Checkbox label for assignee change notifications"
+  },
+  "notificationChangeFilterPriority": {
+    "message": "優先權變更",
+    "description": "Checkbox label for priority change notifications"
+  },
+  "notificationChangeFilterComment": {
+    "message": "留言或日誌活動",
+    "description": "Checkbox label for comment activity notifications"
+  },
+  "notificationChangeFilterGeneric": {
+    "message": "當無法判斷變更類型時，仍保留一般更新通知",
+    "description": "Checkbox label for generic update fallback notifications"
+  },
+  "notificationQuietHoursTitle": {
+    "message": "安靜時段",
+    "description": "Title for quiet hours settings"
+  },
+  "notificationQuietHoursHelp": {
+    "message": "在專注時段抑制打擾型通知，但仍會保留更新歷史。",
+    "description": "Help text for quiet hours settings"
+  },
+  "notificationQuietHoursEnabled": {
+    "message": "啟用安靜時段",
+    "description": "Checkbox label for enabling quiet hours"
+  },
+  "notificationQuietHoursStart": {
+    "message": "開始",
+    "description": "Label for quiet hours start time"
+  },
+  "notificationQuietHoursEnd": {
+    "message": "結束",
+    "description": "Label for quiet hours end time"
+  },
+  "quietHoursInvalidTime": {
+    "message": "安靜時段必須使用有效的 24 小時制時間。",
+    "description": "Validation message for invalid quiet hours"
+  },
+  "quietHoursStartEndSame": {
+    "message": "安靜時段的開始與結束時間不能相同。",
+    "description": "Validation message for matching quiet hour boundaries"
+  },
+  "notificationBundlingTitle": {
+    "message": "通知合併",
+    "description": "Title for notification bundling settings"
+  },
+  "notificationBundlingHelp": {
+    "message": "將同一議題在短時間內的連續更新合併為一筆保留通知。",
+    "description": "Help text for notification bundling settings"
+  },
+  "notificationBundlingEnabled": {
+    "message": "啟用短時間通知合併",
+    "description": "Checkbox label for enabling bundling"
+  },
+  "notificationBundlingWindow": {
+    "message": "合併時間窗",
+    "description": "Label for the notification bundling window"
+  },
   "selectLanguage": {
     "message": "選擇語言：",
     "description": "Language selection field label"
@@ -574,6 +690,10 @@
   "issueUpdatedWithoutDetails": {
     "message": "議題已更新，但無法取得詳細變更",
     "description": "Generic update digest when field-level changes are unavailable"
+  },
+  "bundledUpdatesCount": {
+    "message": "已合併 $1 筆更新",
+    "description": "Summary label for bundled notification updates"
   },
   "changedFromTo": {
     "message": "$1 → $2",

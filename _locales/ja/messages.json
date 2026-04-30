@@ -263,6 +263,122 @@
     "message": "最大表示通知数：",
     "description": "Max notifications field label"
   },
+  "notificationFocusTitle": {
+    "message": "通知フォーカス制御",
+    "description": "Title for notification focus settings"
+  },
+  "notificationFocusHelp": {
+    "message": "どのプロジェクトと更新種別が通知できるかを選び、不要な割り込みを減らします。",
+    "description": "Help text for notification focus settings"
+  },
+  "notificationProjectRulesLabel": {
+    "message": "プロジェクトルール",
+    "description": "Label for notification project rules"
+  },
+  "notificationProjectRulesHelp": {
+    "message": "すべてのプロジェクトを通知対象にするか、含める/除外するプロジェクトだけに制限するかを選択します。",
+    "description": "Help text for notification project rules"
+  },
+  "notificationProjectRuleAll": {
+    "message": "設定済みのすべてのプロジェクト",
+    "description": "Project rule mode for all projects"
+  },
+  "notificationProjectRuleInclude": {
+    "message": "含めたプロジェクトのみ",
+    "description": "Project rule mode for included projects only"
+  },
+  "notificationProjectRuleExclude": {
+    "message": "除外したプロジェクト以外すべて",
+    "description": "Project rule mode for excluding selected projects"
+  },
+  "refreshProjectList": {
+    "message": "プロジェクト一覧を更新",
+    "description": "Button label for refreshing project metadata"
+  },
+  "notificationProjectsLoading": {
+    "message": "プロジェクト一覧を読み込み中...",
+    "description": "Loading message for project metadata"
+  },
+  "notificationProjectsUnavailable": {
+    "message": "プロジェクトルールを読み込むには、先に Redmine 設定を保存してください。",
+    "description": "Message shown when projects cannot be loaded yet"
+  },
+  "notificationProjectsEmpty": {
+    "message": "プロジェクトルールに使用できる Redmine プロジェクトがありません。",
+    "description": "Empty project list message"
+  },
+  "notificationChangeFiltersTitle": {
+    "message": "更新種別フィルター",
+    "description": "Title for notification change filters"
+  },
+  "notificationChangeFiltersHelp": {
+    "message": "どの課題更新を通知として表示するかを選択します。",
+    "description": "Help text for change-type filters"
+  },
+  "notificationChangeFilterStatus": {
+    "message": "ステータス変更",
+    "description": "Checkbox label for status change notifications"
+  },
+  "notificationChangeFilterAssignee": {
+    "message": "担当者変更",
+    "description": "Checkbox label for assignee change notifications"
+  },
+  "notificationChangeFilterPriority": {
+    "message": "優先度変更",
+    "description": "Checkbox label for priority change notifications"
+  },
+  "notificationChangeFilterComment": {
+    "message": "コメントまたはジャーナル更新",
+    "description": "Checkbox label for comment activity notifications"
+  },
+  "notificationChangeFilterGeneric": {
+    "message": "更新種別を判定できない場合でも一般更新通知を残す",
+    "description": "Checkbox label for generic update fallback notifications"
+  },
+  "notificationQuietHoursTitle": {
+    "message": "静かな時間帯",
+    "description": "Title for quiet hours settings"
+  },
+  "notificationQuietHoursHelp": {
+    "message": "集中時間中の割り込み通知を抑えつつ、更新履歴は保持します。",
+    "description": "Help text for quiet hours settings"
+  },
+  "notificationQuietHoursEnabled": {
+    "message": "静かな時間帯を有効にする",
+    "description": "Checkbox label for enabling quiet hours"
+  },
+  "notificationQuietHoursStart": {
+    "message": "開始",
+    "description": "Label for quiet hours start time"
+  },
+  "notificationQuietHoursEnd": {
+    "message": "終了",
+    "description": "Label for quiet hours end time"
+  },
+  "quietHoursInvalidTime": {
+    "message": "静かな時間帯には有効な 24 時間表記を指定してください。",
+    "description": "Validation message for invalid quiet hours"
+  },
+  "quietHoursStartEndSame": {
+    "message": "静かな時間帯の開始と終了は同じにできません。",
+    "description": "Validation message for matching quiet hour boundaries"
+  },
+  "notificationBundlingTitle": {
+    "message": "通知の束ね表示",
+    "description": "Title for notification bundling settings"
+  },
+  "notificationBundlingHelp": {
+    "message": "同じ課題の短時間連続更新を 1 件の保持通知にまとめます。",
+    "description": "Help text for notification bundling settings"
+  },
+  "notificationBundlingEnabled": {
+    "message": "短時間の通知束ね表示を有効にする",
+    "description": "Checkbox label for enabling bundling"
+  },
+  "notificationBundlingWindow": {
+    "message": "束ねる時間幅",
+    "description": "Label for the notification bundling window"
+  },
   "selectLanguage": {
     "message": "言語を選択：",
     "description": "Language selection field label"
@@ -574,6 +690,10 @@
   "issueUpdatedWithoutDetails": {
     "message": "課題は更新されましたが、詳細な変更は取得できません",
     "description": "Generic update digest when field-level changes are unavailable"
+  },
+  "bundledUpdatesCount": {
+    "message": "$1 件の更新をまとめて表示",
+    "description": "Summary label for bundled notification updates"
   },
   "changedFromTo": {
     "message": "$1 → $2",

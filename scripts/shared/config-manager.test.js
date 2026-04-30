@@ -186,12 +186,218 @@ describe('ConfigManager', () => {
           maxNotifications: 100,
           language: 'en',
           onlyMyProjects: true,
-          includeWatchedIssues: false
+          includeWatchedIssues: false,
+          notificationProjectRules: {
+            mode: 'include',
+            includeProjectIds: [1]
+          },
+          notificationChangeFilters: {
+            status: true
+          },
+          notificationQuietHours: {
+            enabled: true,
+            start: '22:00',
+            end: '08:00'
+          },
+          notificationBundling: {
+            enabled: true,
+            windowMinutes: 5
+          }
         };
 
         const sanitized = ConfigManager.sanitizeConfig(config);
-        expect(Object.keys(sanitized)).toHaveLength(9);
+        expect(Object.keys(sanitized)).toHaveLength(13);
         expect(sanitized).toEqual(config);
+      });
+    });
+
+    describe('notification focus settings normalization', () => {
+      test('should expose notification focus setting keys to storage consumers', () => {
+        expect(ConfigManager.getSyncSettingKeys()).toEqual(expect.arrayContaining([
+          'notificationProjectRules',
+          'notificationChangeFilters',
+          'notificationQuietHours',
+          'notificationBundling'
+        ]));
+      });
+
+      test('should return stable defaults for new notification focus settings', () => {
+        expect(ConfigManager.getDefaultSyncSettings()).toEqual(expect.objectContaining({
+          includeWatchedIssues: false,
+          notificationProjectRules: {
+            mode: 'all',
+            includeProjectIds: [],
+            excludeProjectIds: []
+          },
+          notificationChangeFilters: {
+            status: true,
+            assignee: true,
+            priority: true,
+            comment: true,
+            generic: true
+          },
+          notificationQuietHours: {
+            enabled: false,
+            start: '22:00',
+            end: '08:00'
+          },
+          notificationBundling: {
+            enabled: false,
+            windowMinutes: 5
+          }
+        }));
+      });
+
+      test('should normalize runtime settings and coerce invalid focus-control values to defaults', () => {
+        const normalized = ConfigManager.normalizeRuntimeSettings({
+          includeWatchedIssues: 'yes',
+          notificationProjectRules: {
+            includeProjectIds: [1, '2', 'bad', 1],
+            excludeProjectIds: [3]
+          },
+          notificationChangeFilters: {
+            status: false,
+            comment: false
+          },
+          notificationQuietHours: {
+            enabled: true,
+            start: '25:00',
+            end: '08:30'
+          },
+          notificationBundling: {
+            enabled: true,
+            windowMinutes: '15'
+          }
+        }, {
+          apiKey: 'local-key'
+        });
+
+        expect(normalized).toEqual(expect.objectContaining({
+          apiKey: 'local-key',
+          includeWatchedIssues: false,
+          notificationProjectRules: {
+            mode: 'include',
+            includeProjectIds: [1, 2],
+            excludeProjectIds: []
+          },
+          notificationChangeFilters: {
+            status: false,
+            assignee: true,
+            priority: true,
+            comment: false,
+            generic: true
+          },
+          notificationQuietHours: {
+            enabled: true,
+            start: '22:00',
+            end: '08:30'
+          },
+          notificationBundling: {
+            enabled: true,
+            windowMinutes: 15
+          }
+        }));
+      });
+
+      test('should normalize exclude and all project-rule modes predictably', () => {
+        expect(ConfigManager.normalizeNotificationProjectRules({
+          mode: 'exclude',
+          includeProjectIds: [1, 2],
+          excludeProjectIds: ['3', 3, 'bad']
+        })).toEqual({
+          mode: 'exclude',
+          includeProjectIds: [],
+          excludeProjectIds: [3]
+        });
+
+        expect(ConfigManager.normalizeNotificationProjectRules({
+          mode: 'all',
+          includeProjectIds: [1],
+          excludeProjectIds: [2]
+        })).toEqual({
+          mode: 'all',
+          includeProjectIds: [],
+          excludeProjectIds: []
+        });
+      });
+
+      test('should derive project-rule mode from exclude-only and empty inputs', () => {
+        expect(ConfigManager.normalizeNotificationProjectRules({
+          excludeProjectIds: [9]
+        })).toEqual({
+          mode: 'exclude',
+          includeProjectIds: [],
+          excludeProjectIds: [9]
+        });
+
+        expect(ConfigManager.normalizeNotificationProjectRules({
+          mode: 'unknown'
+        })).toEqual({
+          mode: 'all',
+          includeProjectIds: [],
+          excludeProjectIds: []
+        });
+
+        expect(ConfigManager.normalizeIntegerArray(undefined)).toEqual([]);
+      });
+
+      test('should fall back to all mode when include mode has an empty project list', () => {
+        expect(ConfigManager.normalizeNotificationProjectRules({
+          mode: 'include',
+          includeProjectIds: []
+        })).toEqual({
+          mode: 'all',
+          includeProjectIds: [],
+          excludeProjectIds: []
+        });
+
+        expect(ConfigManager.normalizeNotificationProjectRules({
+          mode: 'include',
+          includeProjectIds: ['bad', null]
+        })).toEqual({
+          mode: 'all',
+          includeProjectIds: [],
+          excludeProjectIds: []
+        });
+      });
+
+      test('should validate quiet-hour and bundling configuration boundaries', async () => {
+        const result = await ConfigManager.validateSettings({
+          notificationQuietHours: {
+            enabled: true,
+            start: '22:00',
+            end: '22:00'
+          },
+          notificationBundling: {
+            enabled: true,
+            windowMinutes: 0
+          }
+        });
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toContain('Quiet hours start and end must not be the same');
+        expect(result.errors).toContain('Notification bundling window must be between 1 and 60 minutes');
+      });
+
+      test('should reject invalid quiet-hour time strings', async () => {
+        const result = await ConfigManager.validateSettings({
+          notificationQuietHours: {
+            enabled: true,
+            start: '24:00',
+            end: '08:00'
+          }
+        });
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toContain('Quiet hours must use HH:MM 24-hour format');
+      });
+
+      test('should normalize read notification identifiers and drop invalid values', () => {
+        const normalized = ConfigManager.normalizeSyncSettings({
+          readNotifications: ['issue_1', '', 4, 'issue_2']
+        });
+
+        expect(normalized.readNotifications).toEqual(['issue_1', 'issue_2']);
       });
     });
 
@@ -241,12 +447,20 @@ describe('ConfigManager', () => {
         const result = ConfigManager.splitSettingsBySensitivity({
           redmineUrl: 'https://redmine.example.com',
           apiKey: 'super-secret-key',
-          language: 'en'
+          language: 'en',
+          notificationBundling: {
+            enabled: true,
+            windowMinutes: 10
+          }
         });
 
         expect(result.syncSettings).toEqual({
           redmineUrl: 'https://redmine.example.com',
-          language: 'en'
+          language: 'en',
+          notificationBundling: {
+            enabled: true,
+            windowMinutes: 10
+          }
         });
         expect(result.localSettings).toEqual({
           apiKey: 'super-secret-key'

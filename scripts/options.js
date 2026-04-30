@@ -3,6 +3,7 @@ class OptionsManager {
     this.currentLanguage = 'en';
     this.translations = {};
     this.settings = {};
+    this.availableNotificationProjects = [];
     this.statusHideTimers = new Map();
     this.init();
   }
@@ -16,8 +17,9 @@ class OptionsManager {
     await this.initializeLanguageOptions();
     
     this.updateUI();
-    this.populateForm();
     await this.syncConfiguredPermissionStatus();
+    await this.loadNotificationProjects();
+    this.populateForm();
   }
 
   async loadLanguage(languageOverride) {
@@ -57,38 +59,36 @@ class OptionsManager {
     }
 
     const [syncResult, localResult] = await Promise.all([
-      chrome.storage.sync.get([
-      'redmineUrl',
-      'checkInterval',
-      'enableNotifications',
-      'enableSound',
-      'maxNotifications',
-      'language',
-      'onlyMyProjects',
-      'includeWatchedIssues'
-      ]),
+      chrome.storage.sync.get(
+        configManagerClass?.getSyncSettingKeys
+          ? configManagerClass.getSyncSettingKeys()
+          : [
+              'redmineUrl',
+              'checkInterval',
+              'enableNotifications',
+              'enableSound',
+              'maxNotifications',
+              'language',
+              'onlyMyProjects',
+              'includeWatchedIssues'
+            ]
+      ),
       chrome.storage.local.get(['apiKey'])
     ]);
 
-    const syncSettings = configManagerClass?.normalizeStorageResult
-      ? configManagerClass.normalizeStorageResult(syncResult)
-      : (syncResult && typeof syncResult === 'object' ? syncResult : {});
-    const localSettings = configManagerClass?.normalizeStorageResult
-      ? configManagerClass.normalizeStorageResult(localResult)
-      : (localResult && typeof localResult === 'object' ? localResult : {});
-    const apiKey = typeof localSettings.apiKey === 'string' ? localSettings.apiKey : '';
-
-    this.settings = {
-      redmineUrl: syncSettings.redmineUrl || '',
-      apiKey: apiKey,
-      checkInterval: syncSettings.checkInterval || 15,
-      enableNotifications: syncSettings.enableNotifications !== false,
-      enableSound: syncSettings.enableSound !== false,
-      maxNotifications: syncSettings.maxNotifications || 50,
-      language: syncSettings.language || 'en',
-      onlyMyProjects: syncSettings.onlyMyProjects !== false,
-      includeWatchedIssues: syncSettings.includeWatchedIssues === true
-    };
+    this.settings = configManagerClass?.normalizeRuntimeSettings
+      ? configManagerClass.normalizeRuntimeSettings(syncResult, localResult)
+      : {
+          redmineUrl: '',
+          apiKey: '',
+          checkInterval: 15,
+          enableNotifications: true,
+          enableSound: true,
+          maxNotifications: 50,
+          language: 'en',
+          onlyMyProjects: true,
+          includeWatchedIssues: false
+        };
   }
 
   translate(key, substitutions = []) {
@@ -352,6 +352,244 @@ class OptionsManager {
     return { valid: true, value: num };
   }
 
+  getSelectedNotificationProjectRuleMode() {
+    if (document.getElementById('notificationProjectRuleModeInclude')?.checked) {
+      return 'include';
+    }
+
+    if (document.getElementById('notificationProjectRuleModeExclude')?.checked) {
+      return 'exclude';
+    }
+
+    return 'all';
+  }
+
+  setSelectedNotificationProjectRuleMode(mode) {
+    const normalizedMode = ['include', 'exclude'].includes(mode) ? mode : 'all';
+    const allRadio = document.getElementById('notificationProjectRuleModeAll');
+    const includeRadio = document.getElementById('notificationProjectRuleModeInclude');
+    const excludeRadio = document.getElementById('notificationProjectRuleModeExclude');
+
+    if (allRadio) {
+      allRadio.checked = normalizedMode === 'all';
+    }
+
+    if (includeRadio) {
+      includeRadio.checked = normalizedMode === 'include';
+    }
+
+    if (excludeRadio) {
+      excludeRadio.checked = normalizedMode === 'exclude';
+    }
+  }
+
+  getSelectedNotificationProjectIds() {
+    const projectSelection = document.getElementById('notificationProjectSelection');
+    if (!projectSelection?.querySelectorAll) {
+      return [];
+    }
+
+    return Array.from(projectSelection.querySelectorAll('.project-checkbox-input'))
+      .filter(checkbox => checkbox.checked === true)
+      .map(checkbox => Number.parseInt(checkbox.value, 10))
+      .filter(value => Number.isSafeInteger(value) && value > 0);
+  }
+
+  renderNotificationProjectOptions() {
+    const projectSelection = document.getElementById('notificationProjectSelection');
+    if (!projectSelection) {
+      return;
+    }
+
+    const projectRules = this.settings.notificationProjectRules || { mode: 'all' };
+    const selectedProjectIds = new Set(
+      (
+        projectRules.mode === 'include'
+          ? projectRules.includeProjectIds
+          : projectRules.mode === 'exclude'
+            ? projectRules.excludeProjectIds
+            : []
+      ).map(value => String(value))
+    );
+
+    projectSelection.innerHTML = '';
+    if (Array.isArray(projectSelection.children)) {
+      projectSelection.children.length = 0;
+    }
+
+    this.availableNotificationProjects.forEach(project => {
+      const checkboxLabel = document.createElement('label');
+      checkboxLabel.className = 'checkbox-label project-checkbox-item';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'project-checkbox-input';
+      checkbox.value = String(project.id);
+      checkbox.dataset.projectId = String(project.id);
+      checkbox.checked = selectedProjectIds.has(String(project.id));
+
+      const checkboxText = document.createElement('span');
+      checkboxText.textContent = project.identifier ? `${project.name} (${project.identifier})` : project.name;
+
+      checkboxLabel.appendChild(checkbox);
+      checkboxLabel.appendChild(checkboxText);
+      projectSelection.appendChild(checkboxLabel);
+    });
+
+    this.updateNotificationFocusControlState();
+  }
+
+  updateNotificationFocusControlState() {
+    const projectSelection = document.getElementById('notificationProjectSelection');
+    if (projectSelection) {
+      const shouldDisableProjectSelection = this.getSelectedNotificationProjectRuleMode() === 'all'
+        || this.availableNotificationProjects.length === 0;
+      if (shouldDisableProjectSelection) {
+        projectSelection.classList.add('disabled');
+      } else {
+        projectSelection.classList.remove('disabled');
+      }
+      projectSelection.setAttribute('aria-disabled', shouldDisableProjectSelection ? 'true' : 'false');
+
+      Array.from(projectSelection.querySelectorAll('.project-checkbox-input')).forEach(checkbox => {
+        checkbox.disabled = shouldDisableProjectSelection;
+      });
+    }
+
+    const quietHoursEnabled = document.getElementById('notificationQuietHoursEnabled')?.checked === true;
+    const quietHoursStart = document.getElementById('notificationQuietHoursStart');
+    const quietHoursEnd = document.getElementById('notificationQuietHoursEnd');
+
+    if (quietHoursStart) {
+      quietHoursStart.disabled = !quietHoursEnabled;
+    }
+
+    if (quietHoursEnd) {
+      quietHoursEnd.disabled = !quietHoursEnabled;
+    }
+
+    const bundlingEnabled = document.getElementById('notificationBundlingEnabled')?.checked === true;
+    const bundlingWindow = document.getElementById('notificationBundlingWindow');
+    if (bundlingWindow) {
+      bundlingWindow.disabled = !bundlingEnabled;
+    }
+  }
+
+  clearStatusMessage(elementId) {
+    const element = document.getElementById(elementId);
+    if (!element) {
+      return;
+    }
+
+    this.clearStatusTimer(elementId);
+    element.className = 'status-message';
+    element.textContent = '';
+    element.style.display = 'none';
+  }
+
+  async loadNotificationProjects({ forceRefresh = false } = {}) {
+    const refreshButton = document.getElementById('refreshNotificationProjectsBtn');
+    const statusElementId = 'notificationProjectStatus';
+
+    if (!this.settings.redmineUrl || !this.settings.apiKey || !chrome.runtime?.sendMessage) {
+      this.availableNotificationProjects = [];
+      this.renderNotificationProjectOptions();
+      this.showPersistentStatus(statusElementId, 'info', this.translate('notificationProjectsUnavailable'));
+      return [];
+    }
+
+    if (refreshButton) {
+      refreshButton.disabled = true;
+      refreshButton.textContent = this.translate('notificationProjectsLoading');
+    }
+
+    try {
+      this.showPersistentStatus(statusElementId, 'info', this.translate('notificationProjectsLoading'));
+      const response = await chrome.runtime.sendMessage({
+        action: 'getNotificationProjects',
+        forceRefresh
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.error || 'loadError');
+      }
+
+      this.availableNotificationProjects = Array.isArray(response.projects)
+        ? [...response.projects].sort((left, right) => {
+          const leftName = String(left?.name || '');
+          const rightName = String(right?.name || '');
+          const nameComparison = leftName.localeCompare(rightName, undefined, { sensitivity: 'base' });
+          if (nameComparison !== 0) {
+            return nameComparison;
+          }
+
+          return Number(left?.id || 0) - Number(right?.id || 0);
+        })
+        : [];
+      this.renderNotificationProjectOptions();
+
+      if (this.availableNotificationProjects.length === 0) {
+        this.showPersistentStatus(statusElementId, 'info', this.translate('notificationProjectsEmpty'));
+      } else {
+        this.clearStatusMessage(statusElementId);
+      }
+
+      return this.availableNotificationProjects;
+    } catch (error) {
+      this.availableNotificationProjects = [];
+      this.renderNotificationProjectOptions();
+      this.showPersistentStatus(statusElementId, 'error', this.resolveErrorMessage(error.message || String(error)));
+      return [];
+    } finally {
+      if (refreshButton) {
+        refreshButton.disabled = false;
+        refreshButton.textContent = this.translate('refreshProjectList');
+      }
+    }
+  }
+
+  buildNotificationFocusSettings() {
+    const configManagerClass = this.getConfigManagerClass();
+    const projectRuleMode = this.getSelectedNotificationProjectRuleMode();
+    const selectedProjectIds = this.getSelectedNotificationProjectIds();
+    const rawProjectRules = projectRuleMode === 'include'
+      ? { mode: 'include', includeProjectIds: selectedProjectIds }
+      : projectRuleMode === 'exclude'
+        ? { mode: 'exclude', excludeProjectIds: selectedProjectIds }
+        : { mode: 'all' };
+    const rawChangeFilters = {
+      status: document.getElementById('notificationChangeFilterStatus')?.checked !== false,
+      assignee: document.getElementById('notificationChangeFilterAssignee')?.checked !== false,
+      priority: document.getElementById('notificationChangeFilterPriority')?.checked !== false,
+      comment: document.getElementById('notificationChangeFilterComment')?.checked !== false,
+      generic: document.getElementById('notificationChangeFilterGeneric')?.checked !== false
+    };
+    const rawQuietHours = {
+      enabled: document.getElementById('notificationQuietHoursEnabled')?.checked === true,
+      start: document.getElementById('notificationQuietHoursStart')?.value || '',
+      end: document.getElementById('notificationQuietHoursEnd')?.value || ''
+    };
+    const rawBundling = {
+      enabled: document.getElementById('notificationBundlingEnabled')?.checked === true,
+      windowMinutes: Number.parseInt(document.getElementById('notificationBundlingWindow')?.value, 10)
+    };
+
+    return {
+      notificationProjectRules: configManagerClass?.normalizeNotificationProjectRules
+        ? configManagerClass.normalizeNotificationProjectRules(rawProjectRules)
+        : rawProjectRules,
+      notificationChangeFilters: configManagerClass?.normalizeNotificationChangeFilters
+        ? configManagerClass.normalizeNotificationChangeFilters(rawChangeFilters)
+        : rawChangeFilters,
+      notificationQuietHours: configManagerClass?.normalizeNotificationQuietHours
+        ? configManagerClass.normalizeNotificationQuietHours(rawQuietHours)
+        : rawQuietHours,
+      notificationBundling: configManagerClass?.normalizeNotificationBundling
+        ? configManagerClass.normalizeNotificationBundling(rawBundling)
+        : rawBundling
+    };
+  }
+
   updateUI() {
     // Update page title
     document.title = this.translate('optionsTitle');
@@ -376,6 +614,30 @@ class OptionsManager {
       'onlyMyProjectsLabel': 'onlyMyProjects',
       'includeWatchedIssuesLabel': 'includeWatchedIssues',
       'maxNotificationsLabel': 'maxNotifications',
+      'notificationFocusTitle': 'notificationFocusTitle',
+      'notificationFocusHelp': 'notificationFocusHelp',
+      'notificationProjectRulesLabel': 'notificationProjectRulesLabel',
+      'notificationProjectRulesHelp': 'notificationProjectRulesHelp',
+      'notificationProjectRuleModeAllLabel': 'notificationProjectRuleAll',
+      'notificationProjectRuleModeIncludeLabel': 'notificationProjectRuleInclude',
+      'notificationProjectRuleModeExcludeLabel': 'notificationProjectRuleExclude',
+      'refreshNotificationProjectsBtn': 'refreshProjectList',
+      'notificationChangeFiltersTitle': 'notificationChangeFiltersTitle',
+      'notificationChangeFiltersHelp': 'notificationChangeFiltersHelp',
+      'notificationChangeFilterStatusLabel': 'notificationChangeFilterStatus',
+      'notificationChangeFilterAssigneeLabel': 'notificationChangeFilterAssignee',
+      'notificationChangeFilterPriorityLabel': 'notificationChangeFilterPriority',
+      'notificationChangeFilterCommentLabel': 'notificationChangeFilterComment',
+      'notificationChangeFilterGenericLabel': 'notificationChangeFilterGeneric',
+      'notificationQuietHoursTitle': 'notificationQuietHoursTitle',
+      'notificationQuietHoursHelp': 'notificationQuietHoursHelp',
+      'notificationQuietHoursEnabledLabel': 'notificationQuietHoursEnabled',
+      'notificationQuietHoursStartLabel': 'notificationQuietHoursStart',
+      'notificationQuietHoursEndLabel': 'notificationQuietHoursEnd',
+      'notificationBundlingTitle': 'notificationBundlingTitle',
+      'notificationBundlingHelp': 'notificationBundlingHelp',
+      'notificationBundlingEnabledLabel': 'notificationBundlingEnabled',
+      'notificationBundlingWindowLabel': 'notificationBundlingWindow',
       'languageSettingsTitle': 'languageSettings',
       'languageSelectLabel': 'selectLanguage',
       'aboutTitle': 'about',
@@ -467,6 +729,23 @@ class OptionsManager {
 
     // Update language options dynamically
     this.updateLanguageOptions();
+
+    const bundlingWindowSelect = document.getElementById('notificationBundlingWindow');
+    if (bundlingWindowSelect) {
+      const bundlingMappings = [
+        { value: '5', translationKey: 'minutes5' },
+        { value: '10', translationKey: 'minutes10' },
+        { value: '15', translationKey: 'minutes15' },
+        { value: '30', translationKey: 'minutes30' }
+      ];
+
+      bundlingMappings.forEach((mapping, index) => {
+        const option = bundlingWindowSelect.options[index];
+        if (option && option.value === mapping.value) {
+          option.text = this.translate(mapping.translationKey);
+        }
+      });
+    }
   }
 
   updateLanguageOptions() {
@@ -668,6 +947,25 @@ class OptionsManager {
       this.saveLanguageSettings();
     });
 
+    document.getElementById('refreshNotificationProjectsBtn').addEventListener('click', () => {
+      this.loadNotificationProjects({ forceRefresh: true });
+    });
+
+    [
+      'notificationProjectRuleModeAll',
+      'notificationProjectRuleModeInclude',
+      'notificationProjectRuleModeExclude',
+      'notificationQuietHoursEnabled',
+      'notificationBundlingEnabled'
+    ].forEach(elementId => {
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.addEventListener('change', () => {
+          this.updateNotificationFocusControlState();
+        });
+      }
+    });
+
     // Reset button
     document.getElementById('resetBtn').addEventListener('click', () => {
       this.resetSettings();
@@ -713,7 +1011,20 @@ class OptionsManager {
     document.getElementById('onlyMyProjects').checked = this.settings.onlyMyProjects;
     document.getElementById('includeWatchedIssues').checked = this.settings.includeWatchedIssues;
     document.getElementById('maxNotifications').value = this.settings.maxNotifications;
+    this.setSelectedNotificationProjectRuleMode(this.settings.notificationProjectRules?.mode);
+    document.getElementById('notificationChangeFilterStatus').checked = this.settings.notificationChangeFilters?.status !== false;
+    document.getElementById('notificationChangeFilterAssignee').checked = this.settings.notificationChangeFilters?.assignee !== false;
+    document.getElementById('notificationChangeFilterPriority').checked = this.settings.notificationChangeFilters?.priority !== false;
+    document.getElementById('notificationChangeFilterComment').checked = this.settings.notificationChangeFilters?.comment !== false;
+    document.getElementById('notificationChangeFilterGeneric').checked = this.settings.notificationChangeFilters?.generic !== false;
+    document.getElementById('notificationQuietHoursEnabled').checked = this.settings.notificationQuietHours?.enabled === true;
+    document.getElementById('notificationQuietHoursStart').value = this.settings.notificationQuietHours?.start || '22:00';
+    document.getElementById('notificationQuietHoursEnd').value = this.settings.notificationQuietHours?.end || '08:00';
+    document.getElementById('notificationBundlingEnabled').checked = this.settings.notificationBundling?.enabled === true;
+    document.getElementById('notificationBundlingWindow').value = String(this.settings.notificationBundling?.windowMinutes || 5);
     document.getElementById('languageSelect').value = this.settings.language;
+    this.renderNotificationProjectOptions();
+    this.updateNotificationFocusControlState();
   }
 
   async testConnection() {
@@ -856,6 +1167,7 @@ class OptionsManager {
       // Update local settings
       this.settings.redmineUrl = normalizedUrl;
       this.settings.apiKey = apiKey;
+      await this.loadNotificationProjects({ forceRefresh: true });
       this.showStatus(
         'redmineStatus',
         permissionResult.warningMessage ? 'warning' : 'success',
@@ -890,13 +1202,52 @@ class OptionsManager {
       return;
     }
 
+    const quietHoursEnabled = document.getElementById('notificationQuietHoursEnabled').checked;
+    const quietHoursStartEl = document.getElementById('notificationQuietHoursStart');
+    const quietHoursEndEl = document.getElementById('notificationQuietHoursEnd');
+    const configManagerClass = this.getConfigManagerClass();
+
+    if (quietHoursEnabled) {
+      const isValidQuietHoursTime = typeof configManagerClass?.isValidTimeString === 'function'
+        ? value => configManagerClass.isValidTimeString(value)
+        : value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+
+      if (!isValidQuietHoursTime(quietHoursStartEl.value) || !isValidQuietHoursTime(quietHoursEndEl.value)) {
+        this.showStatus('notificationsStatus', 'error', this.translate('quietHoursInvalidTime'));
+        return;
+      }
+
+      if (quietHoursStartEl.value === quietHoursEndEl.value) {
+        this.showStatus('notificationsStatus', 'error', this.translate('quietHoursStartEndSame'));
+        return;
+      }
+    }
+
+    const bundlingWindowValidation = this.validateNumber(
+      document.getElementById('notificationBundlingWindow').value,
+      1,
+      60,
+      this.translate('notificationBundlingWindow')
+    );
+    if (!bundlingWindowValidation.valid) {
+      this.showStatus('notificationsStatus', 'error', bundlingWindowValidation.message);
+      return;
+    }
+
+    const notificationFocusSettings = this.buildNotificationFocusSettings();
+
     const notificationSettings = {
       checkInterval: checkIntervalValidation.value,
       enableNotifications: document.getElementById('enableNotifications').checked,
       enableSound: document.getElementById('enableSound').checked,
       onlyMyProjects: document.getElementById('onlyMyProjects').checked,
       includeWatchedIssues: document.getElementById('includeWatchedIssues').checked,
-      maxNotifications: maxNotificationsValidation.value
+      maxNotifications: maxNotificationsValidation.value,
+      ...notificationFocusSettings,
+      notificationBundling: {
+        ...notificationFocusSettings.notificationBundling,
+        windowMinutes: bundlingWindowValidation.value
+      }
     };
 
     // Disable button and show loading
@@ -907,6 +1258,8 @@ class OptionsManager {
       await chrome.storage.sync.set(notificationSettings);
       // Update local settings
       Object.assign(this.settings, notificationSettings);
+      this.renderNotificationProjectOptions();
+      this.updateNotificationFocusControlState();
       this.showStatus('notificationsStatus', 'success', this.translate('notificationSettingsSaved'));
     } catch (error) {
       this.showStatus('notificationsStatus', 'error', this.translate('saveError') + ': ' + error.message);
@@ -1053,16 +1406,19 @@ class OptionsManager {
     }
 
     const previousUrl = this.settings.redmineUrl;
-    const defaultSettings = {
-      redmineUrl: '',
-      checkInterval: 15,
-      enableNotifications: true,
-      enableSound: true,
-      onlyMyProjects: true,
-      includeWatchedIssues: false,
-      maxNotifications: 50,
-      language: 'en'
-    };
+    const configManagerClass = this.getConfigManagerClass();
+    const defaultSettings = configManagerClass?.getDefaultSyncSettings
+      ? configManagerClass.getDefaultSyncSettings()
+      : {
+          redmineUrl: '',
+          checkInterval: 15,
+          enableNotifications: true,
+          enableSound: true,
+          onlyMyProjects: true,
+          includeWatchedIssues: false,
+          maxNotifications: 50,
+          language: 'en'
+        };
 
     try {
       await Promise.all([
@@ -1078,7 +1434,9 @@ class OptionsManager {
         ...defaultSettings,
         apiKey: ''
       };
+      this.availableNotificationProjects = [];
       this.populateForm();
+      this.showPersistentStatus('notificationProjectStatus', 'info', this.translate('notificationProjectsUnavailable'));
       this.showStatus('saveStatus', 'success', this.translate('settingsReset'));
     } catch (error) {
       this.showStatus('saveStatus', 'error', this.translate('resetError') + ': ' + error.message);

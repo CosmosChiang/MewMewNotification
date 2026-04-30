@@ -278,6 +278,9 @@ class PopupManager {
   normalizeNotification(notification) {
     return {
       ...notification,
+      bundleCount: Number.isSafeInteger(notification.bundleCount) && notification.bundleCount > 0
+        ? notification.bundleCount
+        : 1,
       updatedOn: notification.updatedOn ? new Date(notification.updatedOn) : new Date()
     };
   }
@@ -612,6 +615,16 @@ class PopupManager {
     const changeSummary = Array.isArray(notification.changeSummary)
       ? notification.changeSummary
       : [];
+    const bundleCount = Number.isSafeInteger(notification.bundleCount) && notification.bundleCount > 1
+      ? notification.bundleCount
+      : 0;
+
+    if (bundleCount > 1) {
+      const bundledRow = document.createElement('div');
+      bundledRow.className = 'change-summary-row generic bundled';
+      bundledRow.textContent = this.translate('bundledUpdatesCount', [bundleCount]);
+      container.appendChild(bundledRow);
+    }
 
     if (changeSummary.length === 0) {
       if (notification.isUpdated) {

@@ -263,6 +263,122 @@
     "message": "Maximum notifications to show:",
     "description": "Max notifications field label"
   },
+  "notificationFocusTitle": {
+    "message": "Notification Focus Controls",
+    "description": "Title for notification focus settings"
+  },
+  "notificationFocusHelp": {
+    "message": "Reduce interruptions by choosing which projects and update types can notify you.",
+    "description": "Help text for notification focus settings"
+  },
+  "notificationProjectRulesLabel": {
+    "message": "Project rules",
+    "description": "Label for notification project rules"
+  },
+  "notificationProjectRulesHelp": {
+    "message": "Choose whether all projects notify you, or limit notifications to included or excluded projects.",
+    "description": "Help text for notification project rules"
+  },
+  "notificationProjectRuleAll": {
+    "message": "All configured projects",
+    "description": "Project rule mode for all projects"
+  },
+  "notificationProjectRuleInclude": {
+    "message": "Only included projects",
+    "description": "Project rule mode for included projects only"
+  },
+  "notificationProjectRuleExclude": {
+    "message": "All except excluded projects",
+    "description": "Project rule mode for excluding selected projects"
+  },
+  "refreshProjectList": {
+    "message": "Refresh project list",
+    "description": "Button label for refreshing project metadata"
+  },
+  "notificationProjectsLoading": {
+    "message": "Loading project list...",
+    "description": "Loading message for project metadata"
+  },
+  "notificationProjectsUnavailable": {
+    "message": "Save Redmine settings first to load projects for project rules.",
+    "description": "Message shown when projects cannot be loaded yet"
+  },
+  "notificationProjectsEmpty": {
+    "message": "No Redmine projects were available for project rules.",
+    "description": "Empty project list message"
+  },
+  "notificationChangeFiltersTitle": {
+    "message": "Change-type filters",
+    "description": "Title for notification change filters"
+  },
+  "notificationChangeFiltersHelp": {
+    "message": "Choose which kinds of issue updates are important enough to surface.",
+    "description": "Help text for change-type filters"
+  },
+  "notificationChangeFilterStatus": {
+    "message": "Status changes",
+    "description": "Checkbox label for status change notifications"
+  },
+  "notificationChangeFilterAssignee": {
+    "message": "Assignee changes",
+    "description": "Checkbox label for assignee change notifications"
+  },
+  "notificationChangeFilterPriority": {
+    "message": "Priority changes",
+    "description": "Checkbox label for priority change notifications"
+  },
+  "notificationChangeFilterComment": {
+    "message": "Comment or journal activity",
+    "description": "Checkbox label for comment activity notifications"
+  },
+  "notificationChangeFilterGeneric": {
+    "message": "Keep generic updates when the change type is uncertain",
+    "description": "Checkbox label for generic update fallback notifications"
+  },
+  "notificationQuietHoursTitle": {
+    "message": "Quiet hours",
+    "description": "Title for quiet hours settings"
+  },
+  "notificationQuietHoursHelp": {
+    "message": "Suppress interruptions during focus time while still keeping updates in history.",
+    "description": "Help text for quiet hours settings"
+  },
+  "notificationQuietHoursEnabled": {
+    "message": "Enable quiet hours",
+    "description": "Checkbox label for enabling quiet hours"
+  },
+  "notificationQuietHoursStart": {
+    "message": "Start",
+    "description": "Label for quiet hours start time"
+  },
+  "notificationQuietHoursEnd": {
+    "message": "End",
+    "description": "Label for quiet hours end time"
+  },
+  "quietHoursInvalidTime": {
+    "message": "Quiet hours must use valid 24-hour times.",
+    "description": "Validation message for invalid quiet hours"
+  },
+  "quietHoursStartEndSame": {
+    "message": "Quiet hours start and end must not be the same.",
+    "description": "Validation message for matching quiet hour boundaries"
+  },
+  "notificationBundlingTitle": {
+    "message": "Bundling",
+    "description": "Title for notification bundling settings"
+  },
+  "notificationBundlingHelp": {
+    "message": "Merge bursty updates for the same issue into one retained notification.",
+    "description": "Help text for notification bundling settings"
+  },
+  "notificationBundlingEnabled": {
+    "message": "Enable short-window bundling",
+    "description": "Checkbox label for enabling bundling"
+  },
+  "notificationBundlingWindow": {
+    "message": "Bundling window",
+    "description": "Label for the notification bundling window"
+  },
   "selectLanguage": {
     "message": "Select Language:",
     "description": "Language selection field label"
@@ -586,6 +702,10 @@
   "issueUpdatedWithoutDetails": {
     "message": "Issue updated; detailed changes are unavailable",
     "description": "Generic update digest when field-level changes are unavailable"
+  },
+  "bundledUpdatesCount": {
+    "message": "$1 updates bundled",
+    "description": "Summary label for bundled notification updates"
   },
   "changedFromTo": {
     "message": "$1 → $2",

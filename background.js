@@ -5,6 +5,8 @@ if (typeof importScripts === 'function') {
 const HOST_PERMISSION_RECOVERY_NOTIFICATION_ID = 'host-permission-recovery';
 const NOTIFICATION_HISTORY_STORAGE_KEY = 'notificationHistory';
 const MAX_NOTIFICATION_HISTORY_ITEMS = 100;
+const NOTIFICATION_PROJECT_CACHE_STORAGE_KEY = 'notificationProjectMetadataCache';
+const NOTIFICATION_PROJECT_CACHE_TTL_MS = 5 * 60 * 1000;
 
 class RedmineAPI {
   constructor(baseUrl, apiKey) {
@@ -541,6 +543,36 @@ class RedmineAPI {
     return this.request('/issue_statuses.json');
   }
 
+  async getProjects() {
+    const allProjects = [];
+    const pageSize = 100;
+    let offset = 0;
+
+    while (true) {
+      const queryParams = new URLSearchParams({
+        limit: String(pageSize),
+        offset: String(offset)
+      });
+      const response = await this.request(`/projects.json?${queryParams.toString()}`);
+      const projects = Array.isArray(response.projects) ? response.projects : [];
+      const totalCount = Number.isSafeInteger(response.total_count)
+        ? response.total_count
+        : projects.length;
+
+      allProjects.push(...projects);
+
+      if (projects.length === 0 || allProjects.length >= totalCount || projects.length < pageSize) {
+        break;
+      }
+
+      offset += projects.length;
+    }
+
+    return {
+      projects: allProjects
+    };
+  }
+
   async getIssueActionContext(issueId) {
     const issueResponse = await this.getIssueDetails(issueId);
     const issue = issueResponse.issue;
@@ -779,6 +811,11 @@ class NotificationManager {
   }
 
   getDefaultSettings() {
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.normalizeRuntimeSettings) {
+      return configManagerClass.normalizeRuntimeSettings({}, {});
+    }
+
     return {
       redmineUrl: '',
       apiKey: '',
@@ -788,7 +825,7 @@ class NotificationManager {
       maxNotifications: 50,
       readNotifications: [],
       onlyMyProjects: true,
-      includeWatchedIssues: true
+      includeWatchedIssues: false
     };
   }
 
@@ -840,6 +877,69 @@ class NotificationManager {
     return configManagerClass?.normalizeStorageResult
       ? configManagerClass.normalizeStorageResult(result)
       : (result && typeof result === 'object' ? result : {});
+  }
+
+  normalizeProjectMetadataRecord(project) {
+    if (!project || typeof project !== 'object' || !Number.isInteger(project.id)) {
+      return undefined;
+    }
+
+    const trimmedName = typeof project.name === 'string' ? project.name.trim() : '';
+    if (!trimmedName) {
+      return undefined;
+    }
+
+    return {
+      id: project.id,
+      name: trimmedName,
+      identifier: typeof project.identifier === 'string' ? project.identifier.trim() : ''
+    };
+  }
+
+  normalizeProjectMetadataRecords(projects) {
+    if (!Array.isArray(projects)) {
+      return [];
+    }
+
+    return projects
+      .map(project => this.normalizeProjectMetadataRecord(project))
+      .filter(Boolean)
+      .sort((left, right) => left.name.localeCompare(right.name) || left.id - right.id);
+  }
+
+  async loadCachedNotificationProjects(redmineUrl) {
+    const result = this.normalizeStorageResult(
+      await chrome.storage.local.get([NOTIFICATION_PROJECT_CACHE_STORAGE_KEY])
+    );
+    const cacheEntry = result[NOTIFICATION_PROJECT_CACHE_STORAGE_KEY];
+    if (!cacheEntry || typeof cacheEntry !== 'object' || cacheEntry.redmineUrl !== redmineUrl) {
+      return undefined;
+    }
+
+    const fetchedAt = Number.isFinite(cacheEntry.fetchedAt)
+      ? cacheEntry.fetchedAt
+      : Date.parse(cacheEntry.fetchedAt);
+    if (!Number.isFinite(fetchedAt) || Date.now() - fetchedAt > NOTIFICATION_PROJECT_CACHE_TTL_MS) {
+      return undefined;
+    }
+
+    return {
+      cached: true,
+      projects: this.normalizeProjectMetadataRecords(cacheEntry.projects)
+    };
+  }
+
+  async saveNotificationProjectsCache(redmineUrl, projects) {
+    const normalizedProjects = this.normalizeProjectMetadataRecords(projects);
+    await chrome.storage.local.set({
+      [NOTIFICATION_PROJECT_CACHE_STORAGE_KEY]: {
+        redmineUrl,
+        fetchedAt: Date.now(),
+        projects: normalizedProjects
+      }
+    });
+
+    return normalizedProjects;
   }
 
   parseHistoryDate(value) {
@@ -903,6 +1003,9 @@ class NotificationManager {
       url: typeof record.url === 'string' ? record.url : '',
       read: record.read === true,
       isUpdated: record.isUpdated === true,
+      bundleCount: Number.isSafeInteger(record.bundleCount) && record.bundleCount > 0
+        ? record.bundleCount
+        : 1,
       sourceType: typeof record.sourceType === 'string' ? record.sourceType : 'unknown',
       changeSummary: this.normalizeChangeSummary(record.changeSummary),
       lastSeenState: this.normalizeIssueSnapshot(record.lastSeenState)
@@ -1000,45 +1103,26 @@ class NotificationManager {
     }
 
     const [syncResult, localResult] = await Promise.all([
-      chrome.storage.sync.get([
-      'redmineUrl',
-      'checkInterval',
-      'enableNotifications',
-      'enableSound',
-      'maxNotifications',
-      'readNotifications',
-      'onlyMyProjects',
-      'includeWatchedIssues'
-      ]),
+      chrome.storage.sync.get(
+        configManagerClass?.getSyncSettingKeys
+          ? configManagerClass.getSyncSettingKeys()
+          : [
+              'redmineUrl',
+              'checkInterval',
+              'enableNotifications',
+              'enableSound',
+              'maxNotifications',
+              'readNotifications',
+              'onlyMyProjects',
+              'includeWatchedIssues'
+            ]
+      ),
       chrome.storage.local.get(['apiKey'])
     ]);
 
-    const syncSettings = this.normalizeStorageResult(syncResult);
-    const localSettings = this.normalizeStorageResult(localResult);
-    const defaultSettings = this.getDefaultSettings();
-
-    this.settings = {
-      ...defaultSettings,
-      redmineUrl: typeof syncSettings.redmineUrl === 'string'
-        ? syncSettings.redmineUrl
-        : defaultSettings.redmineUrl,
-      apiKey: typeof localSettings.apiKey === 'string'
-        ? localSettings.apiKey
-        : defaultSettings.apiKey,
-      checkInterval: Number.isFinite(syncSettings.checkInterval) && syncSettings.checkInterval > 0
-        ? syncSettings.checkInterval
-        : defaultSettings.checkInterval,
-      enableNotifications: syncSettings.enableNotifications !== false,
-      enableSound: syncSettings.enableSound !== false,
-      maxNotifications: Number.isFinite(syncSettings.maxNotifications) && syncSettings.maxNotifications > 0
-        ? syncSettings.maxNotifications
-        : defaultSettings.maxNotifications,
-      readNotifications: Array.isArray(syncSettings.readNotifications)
-        ? syncSettings.readNotifications
-        : defaultSettings.readNotifications,
-      onlyMyProjects: syncSettings.onlyMyProjects !== false,
-      includeWatchedIssues: syncSettings.includeWatchedIssues !== false
-    };
+    this.settings = configManagerClass?.normalizeRuntimeSettings
+      ? configManagerClass.normalizeRuntimeSettings(syncResult, localResult)
+      : this.getDefaultSettings();
     this.settingsLoaded = true;
 
     await this.syncHostPermissionRecoveryState({ notify: notifyPermissionRecovery });
@@ -1051,7 +1135,11 @@ class NotificationManager {
       enableSound: this.settings.enableSound,
       maxNotifications: this.settings.maxNotifications,
       onlyMyProjects: this.settings.onlyMyProjects,
-      includeWatchedIssues: this.settings.includeWatchedIssues
+      includeWatchedIssues: this.settings.includeWatchedIssues,
+      notificationProjectRules: this.settings.notificationProjectRules,
+      notificationChangeFilters: this.settings.notificationChangeFilters,
+      notificationQuietHours: this.settings.notificationQuietHours,
+      notificationBundling: this.settings.notificationBundling
     });
   }
 
@@ -1250,11 +1338,38 @@ class NotificationManager {
     return new RedmineAPI(this.settings.redmineUrl, this.settings.apiKey);
   }
 
-  buildNotificationFromIssue(issue, existingNotification = {}) {
-    const lastSeenState = existingNotification.lastSeenState || this.buildIssueSnapshot(issue);
+  async getNotificationProjects({ forceRefresh = false } = {}) {
+    await this.ensureSettingsLoaded();
+
+    if (!this.settings.redmineUrl || !this.settings.apiKey) {
+      throw new Error('missingRequiredSettings');
+    }
+
+    if (!forceRefresh) {
+      const cachedProjects = await this.loadCachedNotificationProjects(this.settings.redmineUrl);
+      if (cachedProjects) {
+        return cachedProjects;
+      }
+    }
+
+    const api = await this.createApiClient();
+    const response = await api.getProjects();
+    const projects = await this.saveNotificationProjectsCache(this.settings.redmineUrl, response.projects);
 
     return {
-      id: `issue_${issue.id}`,
+      cached: false,
+      projects
+    };
+  }
+
+  buildNotificationFromIssue(issue, existingNotification = {}) {
+    const lastSeenState = existingNotification.lastSeenState || this.buildIssueSnapshot(issue);
+    const updatedOn = new Date(issue.updated_on);
+
+    return {
+      id: typeof existingNotification.id === 'string' && existingNotification.id
+        ? existingNotification.id
+        : this.createNotificationRecordId(issue, updatedOn),
       issueId: issue.id,
       title: `#${issue.id}: ${issue.subject}`,
       project: issue.project?.name || this.translate('unknownProject'),
@@ -1264,10 +1379,13 @@ class NotificationManager {
       assigneeId: issue.assigned_to?.id,
       assigneeName: issue.assigned_to?.name || '',
       projectId: issue.project?.id,
-      updatedOn: new Date(issue.updated_on),
+      updatedOn,
       url: `${this.settings.redmineUrl}/issues/${issue.id}`,
       read: existingNotification.read === true,
       isUpdated: existingNotification.isUpdated === true,
+      bundleCount: Number.isSafeInteger(existingNotification.bundleCount) && existingNotification.bundleCount > 0
+        ? existingNotification.bundleCount
+        : 1,
       sourceType: issue.sourceType || existingNotification.sourceType || 'unknown',
       changeSummary: this.normalizeChangeSummary(existingNotification.changeSummary),
       lastSeenState
@@ -1324,6 +1442,283 @@ class NotificationManager {
     return changes;
   }
 
+  getNotificationProjectRules() {
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.normalizeNotificationProjectRules) {
+      return configManagerClass.normalizeNotificationProjectRules(this.settings?.notificationProjectRules);
+    }
+
+    return {
+      mode: 'all',
+      includeProjectIds: [],
+      excludeProjectIds: []
+    };
+  }
+
+  getNotificationChangeFilters() {
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.normalizeNotificationChangeFilters) {
+      return configManagerClass.normalizeNotificationChangeFilters(this.settings?.notificationChangeFilters);
+    }
+
+    return {
+      status: true,
+      assignee: true,
+      priority: true,
+      comment: true,
+      generic: true
+    };
+  }
+
+  getNotificationQuietHours() {
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.normalizeNotificationQuietHours) {
+      return configManagerClass.normalizeNotificationQuietHours(this.settings?.notificationQuietHours);
+    }
+
+    return {
+      enabled: false,
+      start: '22:00',
+      end: '08:00'
+    };
+  }
+
+  getNotificationBundling() {
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.normalizeNotificationBundling) {
+      return configManagerClass.normalizeNotificationBundling(this.settings?.notificationBundling);
+    }
+
+    return {
+      enabled: false,
+      windowMinutes: 5
+    };
+  }
+
+  createNotificationRecordId(issue, updatedOn = issue?.updated_on) {
+    const normalizedIssueId = Number.isInteger(issue?.id)
+      ? issue.id
+      : Number.parseInt(issue?.issueId, 10);
+    const bundling = this.getNotificationBundling();
+
+    if (!bundling.enabled || !Number.isSafeInteger(normalizedIssueId) || normalizedIssueId <= 0) {
+      return `issue_${normalizedIssueId}`;
+    }
+
+    const updatedTimestamp = updatedOn instanceof Date
+      ? updatedOn.getTime()
+      : Number.isFinite(updatedOn)
+        ? updatedOn
+        : new Date(updatedOn).getTime();
+
+    return `issue_${normalizedIssueId}_${Number.isFinite(updatedTimestamp) ? updatedTimestamp : Date.now()}`;
+  }
+
+  getNotificationsForIssue(issueId) {
+    const normalizedIssueId = Number.parseInt(issueId, 10);
+    if (!Number.isSafeInteger(normalizedIssueId) || normalizedIssueId <= 0) {
+      return [];
+    }
+
+    return Array.from(this.notifications.values())
+      .filter(notification => notification.issueId === normalizedIssueId)
+      .sort((left, right) => right.updatedOn - left.updatedOn);
+  }
+
+  findLatestNotificationForIssue(issueId) {
+    return this.getNotificationsForIssue(issueId)[0];
+  }
+
+  findBundlingTarget(issueId, updatedOn) {
+    const bundling = this.getNotificationBundling();
+    if (!bundling.enabled) {
+      return undefined;
+    }
+
+    const updatedTimestamp = updatedOn instanceof Date
+      ? updatedOn.getTime()
+      : Number.isFinite(updatedOn)
+        ? updatedOn
+        : new Date(updatedOn).getTime();
+    if (!Number.isFinite(updatedTimestamp)) {
+      return undefined;
+    }
+
+    const bundlingWindowMs = bundling.windowMinutes * 60 * 1000;
+
+    return this.getNotificationsForIssue(issueId).find(notification => {
+      const notificationTimestamp = notification.updatedOn instanceof Date
+        ? notification.updatedOn.getTime()
+        : new Date(notification.updatedOn).getTime();
+
+      return Number.isFinite(notificationTimestamp)
+        && updatedTimestamp >= notificationTimestamp
+        && updatedTimestamp - notificationTimestamp <= bundlingWindowMs;
+    });
+  }
+
+  mergeChangeSummary(existingSummary, nextSummary) {
+    const mergedByField = new Map();
+
+    this.normalizeChangeSummary(existingSummary).forEach(change => {
+      mergedByField.set(change.field, { ...change });
+    });
+
+    this.normalizeChangeSummary(nextSummary).forEach(change => {
+      const existingChange = mergedByField.get(change.field);
+      if (!existingChange) {
+        mergedByField.set(change.field, { ...change });
+        return;
+      }
+
+      mergedByField.set(change.field, {
+        field: change.field,
+        from: existingChange.from || change.from,
+        to: change.to
+      });
+    });
+
+    return Array.from(mergedByField.values());
+  }
+
+  isProjectNotificationEligible(projectId) {
+    const projectRules = this.getNotificationProjectRules();
+    const normalizedProjectId = Number.parseInt(projectId, 10);
+    const hasProjectId = Number.isSafeInteger(normalizedProjectId) && normalizedProjectId > 0;
+
+    if (projectRules.mode === 'include') {
+      return hasProjectId && projectRules.includeProjectIds.includes(normalizedProjectId);
+    }
+
+    if (projectRules.mode === 'exclude') {
+      return !hasProjectId || !projectRules.excludeProjectIds.includes(normalizedProjectId);
+    }
+
+    return true;
+  }
+
+  hasExplicitCommentActivity(issue) {
+    if (!issue || typeof issue !== 'object') {
+      return false;
+    }
+
+    const directNoteFields = ['notes', 'last_notes', 'lastNotes', 'journalNotes', 'lastJournalNotes'];
+    if (directNoteFields.some(field => typeof issue[field] === 'string' && issue[field].trim())) {
+      return true;
+    }
+
+    if (!Array.isArray(issue.journals)) {
+      return false;
+    }
+
+    return issue.journals.some(journal => (
+      journal
+      && typeof journal === 'object'
+      && typeof journal.notes === 'string'
+      && journal.notes.trim()
+    ));
+  }
+
+  classifyIssueUpdate(previousState, currentState, issue) {
+    const changeSummary = this.buildIssueChangeSummary(previousState, currentState);
+    const categories = new Set();
+
+    changeSummary.forEach(change => {
+      if (change.field === 'status' || change.field === 'assignee' || change.field === 'priority') {
+        categories.add(change.field);
+      }
+    });
+
+    if (this.hasExplicitCommentActivity(issue)) {
+      categories.add('comment');
+    }
+
+    if (categories.size === 0) {
+      categories.add('generic');
+    }
+
+    return Array.from(categories);
+  }
+
+  areNotificationChangeCategoriesEnabled(changeCategories) {
+    const changeFilters = this.getNotificationChangeFilters();
+    const normalizedCategories = Array.isArray(changeCategories) && changeCategories.length > 0
+      ? changeCategories
+      : ['generic'];
+
+    return normalizedCategories.some(category => {
+      if (Object.prototype.hasOwnProperty.call(changeFilters, category)) {
+        return changeFilters[category] !== false;
+      }
+
+      return changeFilters.generic !== false;
+    });
+  }
+
+  isWithinQuietHours(referenceTime = new Date()) {
+    const quietHours = this.getNotificationQuietHours();
+    if (!quietHours.enabled) {
+      return false;
+    }
+
+    const [startHour, startMinute] = quietHours.start.split(':').map(value => Number.parseInt(value, 10));
+    const [endHour, endMinute] = quietHours.end.split(':').map(value => Number.parseInt(value, 10));
+    const startTotalMinutes = (startHour * 60) + startMinute;
+    const endTotalMinutes = (endHour * 60) + endMinute;
+
+    if (startTotalMinutes === endTotalMinutes) {
+      return false;
+    }
+
+    const currentTotalMinutes = (referenceTime.getHours() * 60) + referenceTime.getMinutes();
+
+    if (startTotalMinutes < endTotalMinutes) {
+      return currentTotalMinutes >= startTotalMinutes && currentTotalMinutes < endTotalMinutes;
+    }
+
+    return currentTotalMinutes >= startTotalMinutes || currentTotalMinutes < endTotalMinutes;
+  }
+
+  evaluateNotificationCandidate(issue, previousState, currentState) {
+    if (!this.isProjectNotificationEligible(issue?.project?.id)) {
+      return {
+        retain: false,
+        deliver: false,
+        reason: 'project'
+      };
+    }
+
+    if (!previousState) {
+      const quietHoursSuppressed = this.isWithinQuietHours();
+
+      return {
+        retain: true,
+        deliver: !quietHoursSuppressed,
+        quietHoursSuppressed,
+        changeCategories: []
+      };
+    }
+
+    const changeCategories = this.classifyIssueUpdate(previousState, currentState, issue);
+    if (!this.areNotificationChangeCategoriesEnabled(changeCategories)) {
+      return {
+        retain: false,
+        deliver: false,
+        reason: 'change-filter',
+        changeCategories
+      };
+    }
+
+    const quietHoursSuppressed = this.isWithinQuietHours();
+
+    return {
+      retain: true,
+      deliver: !quietHoursSuppressed,
+      quietHoursSuppressed,
+      changeCategories
+    };
+  }
+
   async persistIssueState(issue) {
     const result = this.normalizeStorageResult(
       await chrome.storage.local.get(['issueStates'])
@@ -1336,11 +1731,27 @@ class NotificationManager {
   }
 
   async syncUpdatedIssue(issue) {
-    const notificationId = `issue_${issue.id}`;
-    const existingNotification = this.notifications.get(notificationId) || {};
+    const currentState = this.buildIssueSnapshot(issue);
+    const bundlingTarget = this.findBundlingTarget(issue.id, currentState.updatedOn);
+    const notificationId = bundlingTarget?.id || this.createNotificationRecordId(issue, currentState.updatedOn);
+    const existingNotification = bundlingTarget
+      || this.notifications.get(notificationId)
+      || this.findLatestNotificationForIssue(issue.id)
+      || {};
+    const changeSummary = existingNotification.lastSeenState
+      ? this.buildIssueChangeSummary(existingNotification.lastSeenState, currentState)
+      : [];
     const syncedNotification = this.buildNotificationFromIssue(issue, {
       ...existingNotification,
-      isUpdated: false
+      id: notificationId,
+      isUpdated: false,
+      bundleCount: bundlingTarget
+        ? Math.max(existingNotification.bundleCount || 1, 1) + 1
+        : 1,
+      changeSummary: bundlingTarget
+        ? this.mergeChangeSummary(existingNotification.changeSummary, changeSummary)
+        : changeSummary,
+      lastSeenState: currentState
     });
 
     this.notifications.set(notificationId, syncedNotification);
@@ -1499,6 +1910,7 @@ class NotificationManager {
       const previousIssueStates = result.issueStates || {};
       const existingHistory = await this.loadNotificationHistory();
       const existingHistoryById = new Map(existingHistory.map(record => [record.id, record]));
+      this.notifications = new Map(existingHistory.map(record => [record.id, record]));
 
       console.log('Previous issue states count:', Object.keys(previousIssueStates).length);
       console.log('Current issues count:', issues.length);
@@ -1511,30 +1923,43 @@ class NotificationManager {
       const updatedReadNotifications = [...this.settings.readNotifications];
       
       for (const issue of issues) {
-        const notificationId = `issue_${issue.id}`;
-        const existingRecord = existingHistoryById.get(notificationId) || this.notifications.get(notificationId) || {};
-        const isRead = readNotificationsCopy.includes(notificationId) || existingRecord.read === true;
         const currentUpdateTime = new Date(issue.updated_on).getTime();
         const previousState = previousIssueStates[issue.id];
         const currentState = this.buildIssueSnapshot(issue);
         const changeSummary = this.buildIssueChangeSummary(previousState, currentState);
-        
-        const notification = this.buildNotificationFromIssue(issue, {
-          ...existingRecord,
-          read: isRead,
-          isUpdated: false,
-          sourceType: issue.sourceType || existingRecord.sourceType || 'unknown',
-          changeSummary: [],
-          lastSeenState: currentState
-        });
+        const bundlingTarget = this.findBundlingTarget(issue.id, currentUpdateTime);
+        const notificationId = bundlingTarget?.id || this.createNotificationRecordId(issue, currentUpdateTime);
+        const existingRecord = bundlingTarget
+          || existingHistoryById.get(notificationId)
+          || this.notifications.get(notificationId)
+          || {};
+        const isRead = readNotificationsCopy.includes(notificationId) || existingRecord.read === true;
 
         // Check if this is a new issue or an updated issue
         if (!previousState) {
           // New issue
           console.log(`New issue detected: ${issue.id}`);
-          const hasSeenBefore = await this.hasSeenNotification(notificationId);
-          if (!isRead && !hasSeenBefore) {
-            newNotifications.push(notification);
+          const candidate = this.evaluateNotificationCandidate(issue, previousState, currentState);
+
+          if (candidate.retain) {
+            const notification = this.buildNotificationFromIssue(issue, {
+              ...existingRecord,
+              id: notificationId,
+              read: isRead,
+              isUpdated: false,
+              bundleCount: Number.isSafeInteger(existingRecord.bundleCount) && existingRecord.bundleCount > 0
+                ? existingRecord.bundleCount
+                : 1,
+              sourceType: issue.sourceType || existingRecord.sourceType || 'unknown',
+              changeSummary: [],
+              lastSeenState: currentState
+            });
+            this.notifications.set(notificationId, notification);
+
+            const hasSeenBefore = await this.hasSeenNotification(notificationId);
+            if (!isRead && !hasSeenBefore && candidate.deliver) {
+              newNotifications.push(notification);
+            }
           }
         } else {
           // Existing issue - check for updates
@@ -1545,24 +1970,43 @@ class NotificationManager {
               previous: new Date(previousUpdateTime),
               current: new Date(currentUpdateTime)
             });
-            notification.isUpdated = true;
-            notification.changeSummary = changeSummary;
-            
-            // If the issue was previously read but now updated, show notification again
-            if (isRead) {
-              // Remove from read notifications to make it appear as unread
-              const readIndex = updatedReadNotifications.indexOf(notificationId);
-              if (readIndex > -1) {
-                updatedReadNotifications.splice(readIndex, 1);
-                notification.read = false;
+            const candidate = this.evaluateNotificationCandidate(issue, previousState, currentState);
+
+            if (candidate.retain) {
+              const isBundledUpdate = bundlingTarget?.id === notificationId;
+              const notification = this.buildNotificationFromIssue(issue, {
+                ...existingRecord,
+                id: notificationId,
+                read: isRead,
+                isUpdated: true,
+                bundleCount: isBundledUpdate
+                  ? Math.max(existingRecord.bundleCount || 1, 1) + 1
+                  : 1,
+                sourceType: issue.sourceType || existingRecord.sourceType || 'unknown',
+                changeSummary: isBundledUpdate
+                  ? this.mergeChangeSummary(existingRecord.changeSummary, changeSummary)
+                  : changeSummary,
+                lastSeenState: currentState
+              });
+
+              // If the issue was previously read but now updated, show notification again
+              if (isRead) {
+                // Remove from read notifications to make it appear as unread
+                const readIndex = updatedReadNotifications.indexOf(notificationId);
+                if (readIndex > -1) {
+                  updatedReadNotifications.splice(readIndex, 1);
+                  notification.read = false;
+                }
+              }
+
+              this.notifications.set(notificationId, notification);
+
+              if (candidate.deliver) {
+                updatedNotifications.push(notification);
               }
             }
-            
-            updatedNotifications.push(notification);
           }
         }
-
-        this.notifications.set(notificationId, notification);
 
         // Update the issue state in storage
         previousIssueStates[issue.id] = currentState;
@@ -1882,7 +2326,20 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     console.log('Storage changes detected:', Object.keys(changes));
     
     // Reload settings if any setting changed
-    if (Object.keys(changes).some(key => ['redmineUrl', 'checkInterval', 'enableNotifications', 'enableSound', 'maxNotifications', 'onlyMyProjects', 'includeWatchedIssues', 'readNotifications'].includes(key))) {
+    if (Object.keys(changes).some(key => [
+      'redmineUrl',
+      'checkInterval',
+      'enableNotifications',
+      'enableSound',
+      'maxNotifications',
+      'onlyMyProjects',
+      'includeWatchedIssues',
+      'readNotifications',
+      'notificationProjectRules',
+      'notificationChangeFilters',
+      'notificationQuietHours',
+      'notificationBundling'
+    ].includes(key))) {
       console.log('Settings changed, reloading...');
       notificationManager.loadSettings().then(() => {
         // Restart periodic check if check interval changed
@@ -2013,6 +2470,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           settings: safeSettings,
           alarmActive: !!alarm,
           alarmInfo: alarm || null
+        };
+      });
+
+    case 'getNotificationProjects':
+      return handleAsyncResponse(async () => {
+        const result = await notificationManager.getNotificationProjects({
+          forceRefresh: request.forceRefresh === true
+        });
+        return {
+          success: true,
+          ...result
         };
       });
 

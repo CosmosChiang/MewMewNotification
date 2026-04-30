@@ -263,6 +263,122 @@
     "message": "最大显示通知数量：",
     "description": "Max notifications field label"
   },
+  "notificationFocusTitle": {
+    "message": "通知聚焦控制",
+    "description": "Title for notification focus settings"
+  },
+  "notificationFocusHelp": {
+    "message": "通过选择哪些项目和更新类型可以通知你，减少不必要的打扰。",
+    "description": "Help text for notification focus settings"
+  },
+  "notificationProjectRulesLabel": {
+    "message": "项目规则",
+    "description": "Label for notification project rules"
+  },
+  "notificationProjectRulesHelp": {
+    "message": "选择让所有项目通知你，或只限制为纳入/排除的项目。",
+    "description": "Help text for notification project rules"
+  },
+  "notificationProjectRuleAll": {
+    "message": "所有已配置项目",
+    "description": "Project rule mode for all projects"
+  },
+  "notificationProjectRuleInclude": {
+    "message": "仅包含选中的项目",
+    "description": "Project rule mode for included projects only"
+  },
+  "notificationProjectRuleExclude": {
+    "message": "除排除项目外全部通知",
+    "description": "Project rule mode for excluding selected projects"
+  },
+  "refreshProjectList": {
+    "message": "刷新项目列表",
+    "description": "Button label for refreshing project metadata"
+  },
+  "notificationProjectsLoading": {
+    "message": "正在加载项目列表...",
+    "description": "Loading message for project metadata"
+  },
+  "notificationProjectsUnavailable": {
+    "message": "请先保存 Redmine 设置，才能加载项目规则列表。",
+    "description": "Message shown when projects cannot be loaded yet"
+  },
+  "notificationProjectsEmpty": {
+    "message": "当前没有可用于规则配置的 Redmine 项目。",
+    "description": "Empty project list message"
+  },
+  "notificationChangeFiltersTitle": {
+    "message": "变更类型筛选",
+    "description": "Title for notification change filters"
+  },
+  "notificationChangeFiltersHelp": {
+    "message": "选择哪些问题更新类型值得显示为通知。",
+    "description": "Help text for change-type filters"
+  },
+  "notificationChangeFilterStatus": {
+    "message": "状态变更",
+    "description": "Checkbox label for status change notifications"
+  },
+  "notificationChangeFilterAssignee": {
+    "message": "负责人变更",
+    "description": "Checkbox label for assignee change notifications"
+  },
+  "notificationChangeFilterPriority": {
+    "message": "优先级变更",
+    "description": "Checkbox label for priority change notifications"
+  },
+  "notificationChangeFilterComment": {
+    "message": "评论或日志活动",
+    "description": "Checkbox label for comment activity notifications"
+  },
+  "notificationChangeFilterGeneric": {
+    "message": "当无法判断变更类型时，仍保留通用更新通知",
+    "description": "Checkbox label for generic update fallback notifications"
+  },
+  "notificationQuietHoursTitle": {
+    "message": "安静时段",
+    "description": "Title for quiet hours settings"
+  },
+  "notificationQuietHoursHelp": {
+    "message": "在专注时段抑制打扰型通知，但仍保留更新历史。",
+    "description": "Help text for quiet hours settings"
+  },
+  "notificationQuietHoursEnabled": {
+    "message": "启用安静时段",
+    "description": "Checkbox label for enabling quiet hours"
+  },
+  "notificationQuietHoursStart": {
+    "message": "开始",
+    "description": "Label for quiet hours start time"
+  },
+  "notificationQuietHoursEnd": {
+    "message": "结束",
+    "description": "Label for quiet hours end time"
+  },
+  "quietHoursInvalidTime": {
+    "message": "安静时段必须使用有效的 24 小时制时间。",
+    "description": "Validation message for invalid quiet hours"
+  },
+  "quietHoursStartEndSame": {
+    "message": "安静时段的开始与结束时间不能相同。",
+    "description": "Validation message for matching quiet hour boundaries"
+  },
+  "notificationBundlingTitle": {
+    "message": "通知合并",
+    "description": "Title for notification bundling settings"
+  },
+  "notificationBundlingHelp": {
+    "message": "将同一问题在短时间内的连续更新合并为一条保留通知。",
+    "description": "Help text for notification bundling settings"
+  },
+  "notificationBundlingEnabled": {
+    "message": "启用短时间通知合并",
+    "description": "Checkbox label for enabling bundling"
+  },
+  "notificationBundlingWindow": {
+    "message": "合并时间窗",
+    "description": "Label for the notification bundling window"
+  },
   "selectLanguage": {
     "message": "选择语言：",
     "description": "Language selection field label"
@@ -574,6 +690,10 @@
   "issueUpdatedWithoutDetails": {
     "message": "问题已更新，但无法取得详细变更",
     "description": "Generic update digest when field-level changes are unavailable"
+  },
+  "bundledUpdatesCount": {
+    "message": "已合并 $1 条更新",
+    "description": "Summary label for bundled notification updates"
   },
   "changedFromTo": {
     "message": "$1 → $2",
