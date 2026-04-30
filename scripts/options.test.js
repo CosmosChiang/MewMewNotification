@@ -455,6 +455,21 @@ describe('OptionsManager', () => {
     expect(elements.notificationsStatus.textContent).toBe('quietHoursStartEndSame');
   });
 
+  test('defaults blank quiet hours time inputs to ConfigManager defaults and saves', async () => {
+    elements.notificationQuietHoursEnabled.checked = true;
+    elements.notificationQuietHoursStart.value = '';
+    elements.notificationQuietHoursEnd.value = '';
+    global.chrome.storage.sync.set.mockResolvedValue(undefined);
+    global.chrome.storage.local.set.mockResolvedValue(undefined);
+
+    await manager.saveNotificationSettings();
+
+    expect(elements.notificationQuietHoursStart.value).toBe('22:00');
+    expect(elements.notificationQuietHoursEnd.value).toBe('08:00');
+    expect(global.chrome.storage.sync.set).toHaveBeenCalled();
+    expect(elements.notificationsStatus.className).toBe('status-message success');
+  });
+
   test('loads notification projects from the background and renders sorted options', async () => {
     manager.settings.redmineUrl = 'https://redmine.example.com';
     manager.settings.apiKey = 'valid-api-key-123';

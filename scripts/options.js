@@ -1203,21 +1203,24 @@ class OptionsManager {
     }
 
     const quietHoursEnabled = document.getElementById('notificationQuietHoursEnabled').checked;
-    const quietHoursStart = document.getElementById('notificationQuietHoursStart').value;
-    const quietHoursEnd = document.getElementById('notificationQuietHoursEnd').value;
+    const quietHoursStartEl = document.getElementById('notificationQuietHoursStart');
+    const quietHoursEndEl = document.getElementById('notificationQuietHoursEnd');
     const configManagerClass = this.getConfigManagerClass();
 
-    if (
-      quietHoursEnabled
-      && (!configManagerClass?.isValidTimeString || !configManagerClass.isValidTimeString(quietHoursStart) || !configManagerClass.isValidTimeString(quietHoursEnd))
-    ) {
-      this.showStatus('notificationsStatus', 'error', this.translate('quietHoursInvalidTime'));
-      return;
-    }
-
-    if (quietHoursEnabled && quietHoursStart === quietHoursEnd) {
-      this.showStatus('notificationsStatus', 'error', this.translate('quietHoursStartEndSame'));
-      return;
+    if (quietHoursEnabled) {
+      const qhDefaults = configManagerClass?.getDefaultNotificationQuietHours?.();
+      if (qhDefaults) {
+        if (!configManagerClass.isValidTimeString(quietHoursStartEl.value)) {
+          quietHoursStartEl.value = qhDefaults.start;
+        }
+        if (!configManagerClass.isValidTimeString(quietHoursEndEl.value)) {
+          quietHoursEndEl.value = qhDefaults.end;
+        }
+      }
+      if (quietHoursStartEl.value === quietHoursEndEl.value) {
+        this.showStatus('notificationsStatus', 'error', this.translate('quietHoursStartEndSame'));
+        return;
+      }
     }
 
     const bundlingWindowValidation = this.validateNumber(

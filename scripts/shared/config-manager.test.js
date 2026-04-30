@@ -341,6 +341,26 @@ describe('ConfigManager', () => {
         expect(ConfigManager.normalizeIntegerArray(undefined)).toEqual([]);
       });
 
+      test('should fall back to all mode when include mode has an empty project list', () => {
+        expect(ConfigManager.normalizeNotificationProjectRules({
+          mode: 'include',
+          includeProjectIds: []
+        })).toEqual({
+          mode: 'all',
+          includeProjectIds: [],
+          excludeProjectIds: []
+        });
+
+        expect(ConfigManager.normalizeNotificationProjectRules({
+          mode: 'include',
+          includeProjectIds: ['bad', null]
+        })).toEqual({
+          mode: 'all',
+          includeProjectIds: [],
+          excludeProjectIds: []
+        });
+      });
+
       test('should validate quiet-hour and bundling configuration boundaries', async () => {
         const result = await ConfigManager.validateSettings({
           notificationQuietHours: {

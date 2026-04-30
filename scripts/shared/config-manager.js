@@ -119,6 +119,9 @@ class ConfigManager {
     }
 
     if (mode === 'include') {
+      if (includeProjectIds.length === 0) {
+        return defaults;
+      }
       return {
         mode,
         includeProjectIds,
