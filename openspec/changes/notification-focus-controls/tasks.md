@@ -27,8 +27,8 @@
 
 ## 5. Popup and Runtime Consistency
 
-- [ ] 5.1 Update popup rendering as needed so bundled notifications display consistently with existing inbox and digest behavior.
-- [ ] 5.2 Ensure unread badge counts, mark-as-read flows, and retained history semantics continue to work with suppressed and bundled notifications.
+- [x] 5.1 Update popup rendering as needed so bundled notifications display consistently with existing inbox and digest behavior.
+- [x] 5.2 Ensure unread badge counts, mark-as-read flows, and retained history semantics continue to work with suppressed and bundled notifications.
 
 ## 6. Tests and Documentation
 

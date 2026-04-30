@@ -495,6 +495,61 @@ describe('NotificationManager host permission recovery', () => {
     ]);
   });
 
+  test('marks bundled notification records as read by their retained record id', async () => {
+    const chromeMock = createChromeMock();
+    chromeMock.storage.sync.get.mockResolvedValue({ readNotifications: [] });
+    chromeMock.storage.local.get.mockImplementation(async keys => {
+      if (Array.isArray(keys) && keys.includes('notificationHistory')) {
+        return {
+          notificationHistory: [
+            {
+              id: 'issue_21_1745913600000',
+              issueId: 21,
+              read: false,
+              updatedOn: '2026-04-29T08:00:00.000Z'
+            },
+            {
+              id: 'issue_21_1745914200000',
+              issueId: 21,
+              read: false,
+              updatedOn: '2026-04-29T08:10:00.000Z'
+            }
+          ]
+        };
+      }
+
+      return {};
+    });
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.updateBadge = jest.fn();
+    manager.notifications.set('issue_21_1745913600000', {
+      id: 'issue_21_1745913600000',
+      issueId: 21,
+      read: false,
+      updatedOn: new Date('2026-04-29T08:00:00.000Z')
+    });
+    manager.notifications.set('issue_21_1745914200000', {
+      id: 'issue_21_1745914200000',
+      issueId: 21,
+      read: false,
+      updatedOn: new Date('2026-04-29T08:10:00.000Z')
+    });
+
+    await manager.markAsRead('issue_21_1745914200000');
+
+    expect(chromeMock.storage.sync.set).toHaveBeenCalledWith({
+      readNotifications: ['issue_21_1745914200000']
+    });
+    expect(chromeMock.storage.local.set).toHaveBeenCalledWith({
+      notificationHistory: [
+        expect.objectContaining({ id: 'issue_21_1745914200000', read: true, updatedOn: '2026-04-29T08:10:00.000Z' }),
+        expect.objectContaining({ id: 'issue_21_1745913600000', read: false, updatedOn: '2026-04-29T08:00:00.000Z' })
+      ]
+    });
+    expect(manager.updateBadge).toHaveBeenCalledWith(1);
+  });
+
   test('builds issue change summaries from comparable issue snapshots', () => {
     const chromeMock = createChromeMock();
     const { NotificationManager } = loadBackgroundModule(chromeMock);

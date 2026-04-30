@@ -286,6 +286,30 @@ describe('PopupManager', () => {
     expect(createdElements.some(element => element.textContent === 'New -> In Progress')).toBe(true);
   });
 
+  test('renders a bundled updates summary before field-level changes', () => {
+    const appendedRows = [];
+    const container = createMockElement({
+      appendChild: jest.fn(row => appendedRows.push(row))
+    });
+    global.document.createElement.mockImplementation(() => createMockElement());
+    manager.translate = jest.fn((key, substitutions = []) => (
+      key === 'bundledUpdatesCount' ? `${substitutions[0]} updates bundled` : key
+    ));
+
+    manager.renderChangeSummary({
+      bundleCount: 3,
+      isUpdated: true,
+      changeSummary: [
+        { field: 'priority', from: 'Normal', to: 'High' }
+      ]
+    }, container);
+
+    expect(appendedRows).toHaveLength(2);
+    expect(appendedRows[0].className).toBe('change-summary-row generic bundled');
+    expect(appendedRows[0].textContent).toBe('3 updates bundled');
+    expect(appendedRows[1].className).toBe('change-summary-row');
+  });
+
   test('falls back to a regular refresh when force refresh fails', async () => {
     manager.loadNotifications = jest.fn();
     global.chrome.runtime.sendMessage.mockResolvedValue({

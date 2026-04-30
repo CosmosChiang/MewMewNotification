@@ -703,6 +703,10 @@
     "message": "Issue updated; detailed changes are unavailable",
     "description": "Generic update digest when field-level changes are unavailable"
   },
+  "bundledUpdatesCount": {
+    "message": "$1 updates bundled",
+    "description": "Summary label for bundled notification updates"
+  },
   "changedFromTo": {
     "message": "$1 → $2",
     "description": "Change digest value showing old and new values"

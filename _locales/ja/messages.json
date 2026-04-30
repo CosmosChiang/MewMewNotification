@@ -691,6 +691,10 @@
     "message": "課題は更新されましたが、詳細な変更は取得できません",
     "description": "Generic update digest when field-level changes are unavailable"
   },
+  "bundledUpdatesCount": {
+    "message": "$1 件の更新をまとめて表示",
+    "description": "Summary label for bundled notification updates"
+  },
   "changedFromTo": {
     "message": "$1 → $2",
     "description": "Change digest value showing old and new values"

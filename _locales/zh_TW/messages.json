@@ -691,6 +691,10 @@
     "message": "議題已更新，但無法取得詳細變更",
     "description": "Generic update digest when field-level changes are unavailable"
   },
+  "bundledUpdatesCount": {
+    "message": "已合併 $1 筆更新",
+    "description": "Summary label for bundled notification updates"
+  },
   "changedFromTo": {
     "message": "$1 → $2",
     "description": "Change digest value showing old and new values"
