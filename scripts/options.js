@@ -57,38 +57,36 @@ class OptionsManager {
     }
 
     const [syncResult, localResult] = await Promise.all([
-      chrome.storage.sync.get([
-      'redmineUrl',
-      'checkInterval',
-      'enableNotifications',
-      'enableSound',
-      'maxNotifications',
-      'language',
-      'onlyMyProjects',
-      'includeWatchedIssues'
-      ]),
+      chrome.storage.sync.get(
+        configManagerClass?.getSyncSettingKeys
+          ? configManagerClass.getSyncSettingKeys()
+          : [
+              'redmineUrl',
+              'checkInterval',
+              'enableNotifications',
+              'enableSound',
+              'maxNotifications',
+              'language',
+              'onlyMyProjects',
+              'includeWatchedIssues'
+            ]
+      ),
       chrome.storage.local.get(['apiKey'])
     ]);
 
-    const syncSettings = configManagerClass?.normalizeStorageResult
-      ? configManagerClass.normalizeStorageResult(syncResult)
-      : (syncResult && typeof syncResult === 'object' ? syncResult : {});
-    const localSettings = configManagerClass?.normalizeStorageResult
-      ? configManagerClass.normalizeStorageResult(localResult)
-      : (localResult && typeof localResult === 'object' ? localResult : {});
-    const apiKey = typeof localSettings.apiKey === 'string' ? localSettings.apiKey : '';
-
-    this.settings = {
-      redmineUrl: syncSettings.redmineUrl || '',
-      apiKey: apiKey,
-      checkInterval: syncSettings.checkInterval || 15,
-      enableNotifications: syncSettings.enableNotifications !== false,
-      enableSound: syncSettings.enableSound !== false,
-      maxNotifications: syncSettings.maxNotifications || 50,
-      language: syncSettings.language || 'en',
-      onlyMyProjects: syncSettings.onlyMyProjects !== false,
-      includeWatchedIssues: syncSettings.includeWatchedIssues === true
-    };
+    this.settings = configManagerClass?.normalizeRuntimeSettings
+      ? configManagerClass.normalizeRuntimeSettings(syncResult, localResult)
+      : {
+          redmineUrl: '',
+          apiKey: '',
+          checkInterval: 15,
+          enableNotifications: true,
+          enableSound: true,
+          maxNotifications: 50,
+          language: 'en',
+          onlyMyProjects: true,
+          includeWatchedIssues: false
+        };
   }
 
   translate(key, substitutions = []) {
@@ -1053,16 +1051,19 @@ class OptionsManager {
     }
 
     const previousUrl = this.settings.redmineUrl;
-    const defaultSettings = {
-      redmineUrl: '',
-      checkInterval: 15,
-      enableNotifications: true,
-      enableSound: true,
-      onlyMyProjects: true,
-      includeWatchedIssues: false,
-      maxNotifications: 50,
-      language: 'en'
-    };
+    const configManagerClass = this.getConfigManagerClass();
+    const defaultSettings = configManagerClass?.getDefaultSyncSettings
+      ? configManagerClass.getDefaultSyncSettings()
+      : {
+          redmineUrl: '',
+          checkInterval: 15,
+          enableNotifications: true,
+          enableSound: true,
+          onlyMyProjects: true,
+          includeWatchedIssues: false,
+          maxNotifications: 50,
+          language: 'en'
+        };
 
     try {
       await Promise.all([

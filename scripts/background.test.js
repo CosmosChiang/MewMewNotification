@@ -176,20 +176,20 @@ describe('NotificationManager host permission recovery', () => {
     const { NotificationManager } = loadBackgroundModule(chromeMock);
     const manager = new NotificationManager();
     manager.settingsLoaded = false;
-    manager.loadSettings = jest.fn().mockImplementation(async () => {
-      manager.settings = {
-        redmineUrl: '',
-        apiKey: '',
-        checkInterval: 15,
-        enableNotifications: true,
-        enableSound: true,
-        maxNotifications: 50,
-        readNotifications: [],
-        onlyMyProjects: true,
-        includeWatchedIssues: true
-      };
-      return manager.settings;
-    });
+      manager.loadSettings = jest.fn().mockImplementation(async () => {
+        manager.settings = {
+          redmineUrl: '',
+          apiKey: '',
+          checkInterval: 15,
+          enableNotifications: true,
+          enableSound: true,
+          maxNotifications: 50,
+          readNotifications: [],
+          onlyMyProjects: true,
+          includeWatchedIssues: false
+        };
+        return manager.settings;
+      });
 
     await expect(manager.checkNotifications()).resolves.toBeUndefined();
     expect(manager.loadSettings).toHaveBeenCalled();
@@ -204,18 +204,76 @@ describe('NotificationManager host permission recovery', () => {
     const manager = new NotificationManager();
 
     await expect(manager.loadSettings()).resolves.toBeUndefined();
-    expect(manager.settings).toEqual(expect.objectContaining({
-      redmineUrl: '',
-      apiKey: '',
-      checkInterval: 15,
-      enableNotifications: true,
-      enableSound: true,
-      maxNotifications: 50,
-      readNotifications: [],
-      onlyMyProjects: true,
-      includeWatchedIssues: true
+      expect(manager.settings).toEqual(expect.objectContaining({
+        redmineUrl: '',
+        apiKey: '',
+        checkInterval: 15,
+        enableNotifications: true,
+        enableSound: true,
+        maxNotifications: 50,
+        readNotifications: [],
+        onlyMyProjects: true,
+        includeWatchedIssues: false,
+        notificationProjectRules: expect.objectContaining({
+          mode: 'all'
+        }),
+        notificationChangeFilters: expect.objectContaining({
+          status: true
+        }),
+        notificationQuietHours: expect.objectContaining({
+          enabled: false
+        }),
+        notificationBundling: expect.objectContaining({
+          enabled: false,
+          windowMinutes: 5
+        })
+      }));
+      await expect(manager.checkNotifications()).resolves.toBeUndefined();
+    });
+
+  test('loads and caches notification project metadata for options consumers', async () => {
+    const chromeMock = createChromeMock();
+    chromeMock.storage.sync.get.mockResolvedValue({
+      redmineUrl: 'https://redmine.example.com'
+    });
+    chromeMock.storage.local.get.mockImplementation(async keys => {
+      if (Array.isArray(keys) && keys.includes('apiKey')) {
+        return { apiKey: 'valid-api-key-123' };
+      }
+
+      return {};
+    });
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    await manager.loadSettings();
+    manager.settingsLoaded = true;
+    manager.createApiClient = jest.fn().mockResolvedValue({
+      getProjects: jest.fn().mockResolvedValue({
+        projects: [
+          { id: 2, name: 'Web', identifier: 'web' },
+          { id: 1, name: 'API', identifier: 'api' }
+        ]
+      })
+    });
+
+    const result = await manager.getNotificationProjects();
+
+    expect(result).toEqual({
+      cached: false,
+      projects: [
+        { id: 1, name: 'API', identifier: 'api' },
+        { id: 2, name: 'Web', identifier: 'web' }
+      ]
+    });
+    expect(chromeMock.storage.local.set).toHaveBeenCalledWith(expect.objectContaining({
+      notificationProjectMetadataCache: expect.objectContaining({
+        redmineUrl: 'https://redmine.example.com',
+        projects: [
+          { id: 1, name: 'API', identifier: 'api' },
+          { id: 2, name: 'Web', identifier: 'web' }
+        ]
+      })
     }));
-    await expect(manager.checkNotifications()).resolves.toBeUndefined();
   });
 
   test('returns updated notification payload after applying combined issue changes', async () => {

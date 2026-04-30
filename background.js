@@ -5,6 +5,8 @@ if (typeof importScripts === 'function') {
 const HOST_PERMISSION_RECOVERY_NOTIFICATION_ID = 'host-permission-recovery';
 const NOTIFICATION_HISTORY_STORAGE_KEY = 'notificationHistory';
 const MAX_NOTIFICATION_HISTORY_ITEMS = 100;
+const NOTIFICATION_PROJECT_CACHE_STORAGE_KEY = 'notificationProjectMetadataCache';
+const NOTIFICATION_PROJECT_CACHE_TTL_MS = 5 * 60 * 1000;
 
 class RedmineAPI {
   constructor(baseUrl, apiKey) {
@@ -541,6 +543,36 @@ class RedmineAPI {
     return this.request('/issue_statuses.json');
   }
 
+  async getProjects() {
+    const allProjects = [];
+    const pageSize = 100;
+    let offset = 0;
+
+    while (true) {
+      const queryParams = new URLSearchParams({
+        limit: String(pageSize),
+        offset: String(offset)
+      });
+      const response = await this.request(`/projects.json?${queryParams.toString()}`);
+      const projects = Array.isArray(response.projects) ? response.projects : [];
+      const totalCount = Number.isSafeInteger(response.total_count)
+        ? response.total_count
+        : projects.length;
+
+      allProjects.push(...projects);
+
+      if (projects.length === 0 || allProjects.length >= totalCount || projects.length < pageSize) {
+        break;
+      }
+
+      offset += projects.length;
+    }
+
+    return {
+      projects: allProjects
+    };
+  }
+
   async getIssueActionContext(issueId) {
     const issueResponse = await this.getIssueDetails(issueId);
     const issue = issueResponse.issue;
@@ -779,6 +811,11 @@ class NotificationManager {
   }
 
   getDefaultSettings() {
+    const configManagerClass = globalThis.ConfigManager;
+    if (configManagerClass?.normalizeRuntimeSettings) {
+      return configManagerClass.normalizeRuntimeSettings({}, {});
+    }
+
     return {
       redmineUrl: '',
       apiKey: '',
@@ -788,7 +825,7 @@ class NotificationManager {
       maxNotifications: 50,
       readNotifications: [],
       onlyMyProjects: true,
-      includeWatchedIssues: true
+      includeWatchedIssues: false
     };
   }
 
@@ -840,6 +877,69 @@ class NotificationManager {
     return configManagerClass?.normalizeStorageResult
       ? configManagerClass.normalizeStorageResult(result)
       : (result && typeof result === 'object' ? result : {});
+  }
+
+  normalizeProjectMetadataRecord(project) {
+    if (!project || typeof project !== 'object' || !Number.isInteger(project.id)) {
+      return undefined;
+    }
+
+    const trimmedName = typeof project.name === 'string' ? project.name.trim() : '';
+    if (!trimmedName) {
+      return undefined;
+    }
+
+    return {
+      id: project.id,
+      name: trimmedName,
+      identifier: typeof project.identifier === 'string' ? project.identifier.trim() : ''
+    };
+  }
+
+  normalizeProjectMetadataRecords(projects) {
+    if (!Array.isArray(projects)) {
+      return [];
+    }
+
+    return projects
+      .map(project => this.normalizeProjectMetadataRecord(project))
+      .filter(Boolean)
+      .sort((left, right) => left.name.localeCompare(right.name) || left.id - right.id);
+  }
+
+  async loadCachedNotificationProjects(redmineUrl) {
+    const result = this.normalizeStorageResult(
+      await chrome.storage.local.get([NOTIFICATION_PROJECT_CACHE_STORAGE_KEY])
+    );
+    const cacheEntry = result[NOTIFICATION_PROJECT_CACHE_STORAGE_KEY];
+    if (!cacheEntry || typeof cacheEntry !== 'object' || cacheEntry.redmineUrl !== redmineUrl) {
+      return undefined;
+    }
+
+    const fetchedAt = Number.isFinite(cacheEntry.fetchedAt)
+      ? cacheEntry.fetchedAt
+      : Date.parse(cacheEntry.fetchedAt);
+    if (!Number.isFinite(fetchedAt) || Date.now() - fetchedAt > NOTIFICATION_PROJECT_CACHE_TTL_MS) {
+      return undefined;
+    }
+
+    return {
+      cached: true,
+      projects: this.normalizeProjectMetadataRecords(cacheEntry.projects)
+    };
+  }
+
+  async saveNotificationProjectsCache(redmineUrl, projects) {
+    const normalizedProjects = this.normalizeProjectMetadataRecords(projects);
+    await chrome.storage.local.set({
+      [NOTIFICATION_PROJECT_CACHE_STORAGE_KEY]: {
+        redmineUrl,
+        fetchedAt: Date.now(),
+        projects: normalizedProjects
+      }
+    });
+
+    return normalizedProjects;
   }
 
   parseHistoryDate(value) {
@@ -1000,45 +1100,26 @@ class NotificationManager {
     }
 
     const [syncResult, localResult] = await Promise.all([
-      chrome.storage.sync.get([
-      'redmineUrl',
-      'checkInterval',
-      'enableNotifications',
-      'enableSound',
-      'maxNotifications',
-      'readNotifications',
-      'onlyMyProjects',
-      'includeWatchedIssues'
-      ]),
+      chrome.storage.sync.get(
+        configManagerClass?.getSyncSettingKeys
+          ? configManagerClass.getSyncSettingKeys()
+          : [
+              'redmineUrl',
+              'checkInterval',
+              'enableNotifications',
+              'enableSound',
+              'maxNotifications',
+              'readNotifications',
+              'onlyMyProjects',
+              'includeWatchedIssues'
+            ]
+      ),
       chrome.storage.local.get(['apiKey'])
     ]);
 
-    const syncSettings = this.normalizeStorageResult(syncResult);
-    const localSettings = this.normalizeStorageResult(localResult);
-    const defaultSettings = this.getDefaultSettings();
-
-    this.settings = {
-      ...defaultSettings,
-      redmineUrl: typeof syncSettings.redmineUrl === 'string'
-        ? syncSettings.redmineUrl
-        : defaultSettings.redmineUrl,
-      apiKey: typeof localSettings.apiKey === 'string'
-        ? localSettings.apiKey
-        : defaultSettings.apiKey,
-      checkInterval: Number.isFinite(syncSettings.checkInterval) && syncSettings.checkInterval > 0
-        ? syncSettings.checkInterval
-        : defaultSettings.checkInterval,
-      enableNotifications: syncSettings.enableNotifications !== false,
-      enableSound: syncSettings.enableSound !== false,
-      maxNotifications: Number.isFinite(syncSettings.maxNotifications) && syncSettings.maxNotifications > 0
-        ? syncSettings.maxNotifications
-        : defaultSettings.maxNotifications,
-      readNotifications: Array.isArray(syncSettings.readNotifications)
-        ? syncSettings.readNotifications
-        : defaultSettings.readNotifications,
-      onlyMyProjects: syncSettings.onlyMyProjects !== false,
-      includeWatchedIssues: syncSettings.includeWatchedIssues !== false
-    };
+    this.settings = configManagerClass?.normalizeRuntimeSettings
+      ? configManagerClass.normalizeRuntimeSettings(syncResult, localResult)
+      : this.getDefaultSettings();
     this.settingsLoaded = true;
 
     await this.syncHostPermissionRecoveryState({ notify: notifyPermissionRecovery });
@@ -1051,7 +1132,11 @@ class NotificationManager {
       enableSound: this.settings.enableSound,
       maxNotifications: this.settings.maxNotifications,
       onlyMyProjects: this.settings.onlyMyProjects,
-      includeWatchedIssues: this.settings.includeWatchedIssues
+      includeWatchedIssues: this.settings.includeWatchedIssues,
+      notificationProjectRules: this.settings.notificationProjectRules,
+      notificationChangeFilters: this.settings.notificationChangeFilters,
+      notificationQuietHours: this.settings.notificationQuietHours,
+      notificationBundling: this.settings.notificationBundling
     });
   }
 
@@ -1248,6 +1333,30 @@ class NotificationManager {
 
     await this.ensureConfiguredHostAccess();
     return new RedmineAPI(this.settings.redmineUrl, this.settings.apiKey);
+  }
+
+  async getNotificationProjects({ forceRefresh = false } = {}) {
+    await this.ensureSettingsLoaded();
+
+    if (!this.settings.redmineUrl || !this.settings.apiKey) {
+      throw new Error('missingRequiredSettings');
+    }
+
+    if (!forceRefresh) {
+      const cachedProjects = await this.loadCachedNotificationProjects(this.settings.redmineUrl);
+      if (cachedProjects) {
+        return cachedProjects;
+      }
+    }
+
+    const api = await this.createApiClient();
+    const response = await api.getProjects();
+    const projects = await this.saveNotificationProjectsCache(this.settings.redmineUrl, response.projects);
+
+    return {
+      cached: false,
+      projects
+    };
   }
 
   buildNotificationFromIssue(issue, existingNotification = {}) {
@@ -1882,7 +1991,20 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     console.log('Storage changes detected:', Object.keys(changes));
     
     // Reload settings if any setting changed
-    if (Object.keys(changes).some(key => ['redmineUrl', 'checkInterval', 'enableNotifications', 'enableSound', 'maxNotifications', 'onlyMyProjects', 'includeWatchedIssues', 'readNotifications'].includes(key))) {
+    if (Object.keys(changes).some(key => [
+      'redmineUrl',
+      'checkInterval',
+      'enableNotifications',
+      'enableSound',
+      'maxNotifications',
+      'onlyMyProjects',
+      'includeWatchedIssues',
+      'readNotifications',
+      'notificationProjectRules',
+      'notificationChangeFilters',
+      'notificationQuietHours',
+      'notificationBundling'
+    ].includes(key))) {
       console.log('Settings changed, reloading...');
       notificationManager.loadSettings().then(() => {
         // Restart periodic check if check interval changed
@@ -2013,6 +2135,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           settings: safeSettings,
           alarmActive: !!alarm,
           alarmInfo: alarm || null
+        };
+      });
+
+    case 'getNotificationProjects':
+      return handleAsyncResponse(async () => {
+        const result = await notificationManager.getNotificationProjects({
+          forceRefresh: request.forceRefresh === true
+        });
+        return {
+          success: true,
+          ...result
         };
       });
 
