@@ -95,7 +95,9 @@ function loadBackgroundModule(chromeMock) {
     performance: { now: () => 0 },
     setTimeout,
     clearTimeout,
-    fetch: jest.fn().mockResolvedValue({
+    fetch: global.fetch && global.fetch._isMockFunction
+      ? global.fetch
+      : jest.fn().mockResolvedValue({
       json: () => Promise.resolve({
         extName: { message: 'MewMewNotification' },
         hostPermissionRequired: {
@@ -398,13 +400,8 @@ describe('NotificationManager host permission recovery', () => {
         current: expect.objectContaining({ statusId: 3 })
       })
     }));
-    expect(chromeMock.storage.local.set).toHaveBeenCalledWith(expect.objectContaining({
-      issueStates: expect.objectContaining({
-        7: expect.objectContaining({
-          status: 'Resolved',
-          subject: 'Review popup actions'
-        })
-      })
+    expect(chromeMock.storage.local.set).not.toHaveBeenCalledWith(expect.objectContaining({
+      issueStates: expect.any(Object)
     }));
   });
 
@@ -432,6 +429,42 @@ describe('NotificationManager host permission recovery', () => {
     expect(api.parsePositiveInteger('07', 'issue id')).toBe(7);
     expect(() => api.parsePositiveInteger('7abc', 'issue id')).toThrow('Invalid issue id');
     expect(() => api.parsePositiveInteger('1.5', 'status id')).toThrow('Invalid status id');
+  });
+
+  test('bounds Redmine API cache size by evicting the earliest expiry', () => {
+    const chromeMock = createChromeMock();
+    const { RedmineAPI } = loadBackgroundModule(chromeMock);
+    const api = new RedmineAPI('https://redmine.example.com', 'valid-api-key-123');
+    api.maxCacheSize = 2;
+
+    api.setCache('oldest', { value: 1 }, 1000);
+    api.setCache('newer', { value: 2 }, 2000);
+    api.setCache('newest', { value: 3 }, 3000);
+
+    expect(api.getFromCache('oldest')).toBeNull();
+    expect(api.getFromCache('newer')).toEqual({ value: 2 });
+    expect(api.getFromCache('newest')).toEqual({ value: 3 });
+    expect(api.cache.size).toBe(2);
+  });
+
+  test('stops retrying 429 responses after the retry limit is reached', async () => {
+    const chromeMock = createChromeMock();
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 429,
+      ok: false,
+      headers: {
+        get: jest.fn(() => '60')
+      }
+    });
+    const { RedmineAPI } = loadBackgroundModule(chromeMock);
+    const api = new RedmineAPI('https://redmine.example.com', 'valid-api-key-123');
+
+    await expect(api.makeRequest('/issues.json', {}, 3)).rejects.toThrow('rateLimitRetryExceeded');
+    const redmineCalls = global.fetch.mock.calls.filter(([url]) => (
+      typeof url === 'string' && url === 'https://redmine.example.com/issues.json'
+    ));
+    expect(redmineCalls).toHaveLength(1);
+    delete global.fetch;
   });
 
   test('maps forbidden issue actions to a permission error', async () => {
@@ -548,6 +581,26 @@ describe('NotificationManager host permission recovery', () => {
       ]
     });
     expect(manager.updateBadge).toHaveBeenCalledWith(1);
+  });
+
+  test('trims read notifications to the newest 1000 entries when marking read', async () => {
+    const chromeMock = createChromeMock();
+    const existingReadIds = Array.from({ length: 1000 }, (_, index) => `issue_${index}`);
+    const expectedReadIds = [
+      ...existingReadIds.slice(1),
+      'issue_new'
+    ];
+    chromeMock.storage.sync.get.mockResolvedValue({ readNotifications: existingReadIds });
+    chromeMock.storage.local.get.mockResolvedValue({ notificationHistory: [] });
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.updateBadge = jest.fn();
+
+    await manager.markAsRead('issue_new');
+
+    expect(chromeMock.storage.sync.set).toHaveBeenCalledWith({
+      readNotifications: expectedReadIds
+    });
   });
 
   test('builds issue change summaries from comparable issue snapshots', () => {

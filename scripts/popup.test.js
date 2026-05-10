@@ -14,6 +14,7 @@ function createMockElement(overrides = {}) {
     addEventListener: jest.fn(),
     removeEventListener: jest.fn(),
     appendChild: jest.fn(),
+    replaceChildren: jest.fn(),
     ...overrides
   };
 }
@@ -193,6 +194,79 @@ describe('PopupManager', () => {
     ]);
     expect(manager.getVisibleNotifications()).toEqual([{ id: 2, read: false }]);
     expect(manager.renderNotifications).toHaveBeenCalled();
+  });
+
+  test('delegates notification clicks from element and text-node targets', () => {
+    manager.notifications = [
+      { id: 'issue_10', read: false, url: 'https://redmine.example.com/issues/10' }
+    ];
+    manager.openNotification = jest.fn();
+    manager.markAsRead = jest.fn();
+    manager.toggleAdvancedActions = jest.fn();
+
+    const notificationElement = {
+      dataset: { notificationId: 'issue_10' }
+    };
+    const openActionElement = {
+      dataset: { action: 'open-notification' },
+      closest: jest.fn(selector => (
+        selector === '[data-notification-id]' ? notificationElement : undefined
+      ))
+    };
+    const openTarget = {
+      closest: jest.fn(selector => (
+        selector === '[data-action]' ? openActionElement : undefined
+      ))
+    };
+    const textNodeTarget = {
+      parentElement: openTarget
+    };
+    const openEvent = {
+      target: textNodeTarget,
+      stopPropagation: jest.fn()
+    };
+
+    manager.handleNotificationClick(openEvent);
+
+    expect(openTarget.closest).toHaveBeenCalledWith('[data-action]');
+    expect(openActionElement.closest).toHaveBeenCalledWith('[data-notification-id]');
+    expect(openEvent.stopPropagation).toHaveBeenCalled();
+    expect(manager.openNotification).toHaveBeenCalledWith(manager.notifications[0]);
+
+    const markReadActionElement = {
+      dataset: { action: 'mark-read' },
+      closest: jest.fn(selector => (
+        selector === '[data-notification-id]' ? notificationElement : undefined
+      ))
+    };
+    const markReadTarget = {
+      closest: jest.fn(selector => (
+        selector === '[data-action]' ? markReadActionElement : undefined
+      ))
+    };
+    const markReadEvent = {
+      target: markReadTarget,
+      stopPropagation: jest.fn()
+    };
+
+    manager.handleNotificationClick(markReadEvent);
+
+    expect(markReadEvent.stopPropagation).toHaveBeenCalled();
+    expect(manager.markAsRead).toHaveBeenCalledWith('issue_10');
+  });
+
+  test('ignores delegated notification clicks when the target cannot be resolved', () => {
+    manager.openNotification = jest.fn();
+    manager.markAsRead = jest.fn();
+    const event = {
+      target: { nodeType: 3 },
+      stopPropagation: jest.fn()
+    };
+
+    expect(() => manager.handleNotificationClick(event)).not.toThrow();
+    expect(event.stopPropagation).not.toHaveBeenCalled();
+    expect(manager.openNotification).not.toHaveBeenCalled();
+    expect(manager.markAsRead).not.toHaveBeenCalled();
   });
 
   test('filters retained notifications by inbox view and search query', () => {

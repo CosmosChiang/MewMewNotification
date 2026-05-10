@@ -7,6 +7,9 @@ const NOTIFICATION_HISTORY_STORAGE_KEY = 'notificationHistory';
 const MAX_NOTIFICATION_HISTORY_ITEMS = 100;
 const NOTIFICATION_PROJECT_CACHE_STORAGE_KEY = 'notificationProjectMetadataCache';
 const NOTIFICATION_PROJECT_CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_CACHE_SIZE = 100;
+const MAX_REQUEST_RETRIES = 3;
+const MAX_READ_NOTIFICATIONS = 1000;
 
 class RedmineAPI {
   constructor(baseUrl, apiKey) {
@@ -23,6 +26,7 @@ class RedmineAPI {
     this.cache = new Map();
     this.cacheExpiry = new Map();
     this.defaultCacheTime = 5 * 60 * 1000; // 5 minutes default cache
+    this.maxCacheSize = MAX_CACHE_SIZE;
     this.lastSyncTime = null;
     this.incrementalSyncEnabled = true;
   }
@@ -56,8 +60,29 @@ class RedmineAPI {
   }
 
   setCache(key, value, ttl = this.defaultCacheTime) {
+    if (!this.cache.has(key) && this.cache.size >= this.maxCacheSize) {
+      this._evictOldestCacheEntry();
+    }
+
     this.cache.set(key, value);
     this.cacheExpiry.set(key, Date.now() + ttl);
+  }
+
+  _evictOldestCacheEntry() {
+    let oldestKey;
+    let oldestExpiry = Infinity;
+
+    for (const [key, expiry] of this.cacheExpiry) {
+      if (expiry < oldestExpiry) {
+        oldestKey = key;
+        oldestExpiry = expiry;
+      }
+    }
+
+    if (oldestKey !== undefined) {
+      this.cache.delete(oldestKey);
+      this.cacheExpiry.delete(oldestKey);
+    }
   }
 
   clearCache() {
@@ -101,7 +126,7 @@ class RedmineAPI {
     this.isProcessing = false;
   }
 
-  async makeRequest(endpoint, options = {}) {
+  async makeRequest(endpoint, options = {}, retryCount = 0) {
     // Security validation
     this.validateApiEndpoint(endpoint);
     
@@ -126,11 +151,15 @@ class RedmineAPI {
       const response = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (response.status === 429) {
+        if (retryCount >= MAX_REQUEST_RETRIES) {
+          throw new Error('rateLimitRetryExceeded');
+        }
+
         // Rate limited - wait and retry
-        const retryAfter = response.headers.get('Retry-After') || 60;
+        const retryAfter = Math.min(Number.parseInt(response.headers.get('Retry-After'), 10) || 60, 300);
         console.warn(`Rate limited. Waiting ${retryAfter} seconds before retry.`);
         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-        return this.makeRequest(endpoint, options);
+        return this.makeRequest(endpoint, options, retryCount + 1);
       }
 
       if (!response.ok) {
@@ -1719,17 +1748,6 @@ class NotificationManager {
     };
   }
 
-  async persistIssueState(issue) {
-    const result = this.normalizeStorageResult(
-      await chrome.storage.local.get(['issueStates'])
-    );
-    const issueStates = result.issueStates || {};
-
-    issueStates[issue.id] = this.buildIssueSnapshot(issue);
-
-    await chrome.storage.local.set({ issueStates });
-  }
-
   async syncUpdatedIssue(issue) {
     const currentState = this.buildIssueSnapshot(issue);
     const bundlingTarget = this.findBundlingTarget(issue.id, currentState.updatedOn);
@@ -1755,7 +1773,6 @@ class NotificationManager {
     });
 
     this.notifications.set(notificationId, syncedNotification);
-    await this.persistIssueState(issue);
     const retainedHistory = await this.mergeNotificationHistory([syncedNotification], {
       readNotificationIds: this.settings.readNotifications
     });
@@ -2018,8 +2035,12 @@ class NotificationManager {
         await chrome.storage.sync.set({ readNotifications: updatedReadNotifications });
       }
 
-      // Save updated issue states
-      await chrome.storage.local.set({ issueStates: previousIssueStates });
+      try {
+        await chrome.storage.local.set({ issueStates: previousIssueStates });
+      } catch (error) {
+        console.error('Failed to persist issue states:', error);
+      }
+
       await this.mergeNotificationHistory(
         Array.from(this.notifications.values()),
         { readNotificationIds: updatedReadNotifications }
@@ -2179,6 +2200,7 @@ class NotificationManager {
     
     if (!readNotifications.includes(notificationId)) {
       readNotifications.push(notificationId);
+      this.trimReadNotifications(readNotifications);
       await chrome.storage.sync.set({ readNotifications });
     }
 
@@ -2205,12 +2227,14 @@ class NotificationManager {
       notification.read = true;
       if (!readNotifications.includes(notification.id)) {
         readNotifications.push(notification.id);
+        this.trimReadNotifications(readNotifications);
       }
     }
 
     const updatedHistory = history.map(record => {
       if (!readNotifications.includes(record.id)) {
         readNotifications.push(record.id);
+        this.trimReadNotifications(readNotifications);
       }
 
       return { ...record, read: true };
@@ -2236,6 +2260,12 @@ class NotificationManager {
         chrome.notifications.clear(notificationId);
       });
     });
+  }
+
+  trimReadNotifications(readNotifications) {
+    if (readNotifications.length > MAX_READ_NOTIFICATIONS) {
+      readNotifications.splice(0, readNotifications.length - MAX_READ_NOTIFICATIONS);
+    }
   }
 
   async forceRefreshNotifications() {

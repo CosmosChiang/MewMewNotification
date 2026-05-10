@@ -248,11 +248,57 @@ class PopupManager {
       });
     }
 
+    const notificationsList = document.getElementById('notificationsList');
+    if (notificationsList) {
+      notificationsList.addEventListener('click', event => {
+        this.handleNotificationClick(event);
+      });
+    }
+
     chrome.storage.onChanged.addListener((changes, namespace) => {
       if (namespace === 'sync' && changes.language) {
         this.loadLanguage();
       }
     });
+  }
+
+  handleNotificationClick(event) {
+    const eventTarget = event.target;
+    const closestSource = eventTarget && typeof eventTarget.closest === 'function'
+      ? eventTarget
+      : eventTarget?.parentElement;
+    if (!closestSource || typeof closestSource.closest !== 'function') {
+      return;
+    }
+
+    const actionElement = closestSource.closest('[data-action]');
+    if (!actionElement) {
+      return;
+    }
+
+    const notificationElement = actionElement.closest('[data-notification-id]');
+    const notificationId = notificationElement?.dataset.notificationId;
+    if (!notificationId) {
+      return;
+    }
+
+    const notification = this.findNotification(notificationId);
+    if (!notification) {
+      return;
+    }
+
+    event.stopPropagation();
+    const action = actionElement.dataset.action;
+
+    if (action === 'open-notification') {
+      this.openNotification(notification);
+    } else if (action === 'more-actions') {
+      this.toggleAdvancedActions(notificationId);
+    } else if (action === 'mark-read') {
+      this.markAsRead(notificationId);
+    } else if (action === 'submit-issue-changes') {
+      this.submitIssueChanges(notificationId);
+    }
   }
 
   async loadNotifications() {
@@ -432,12 +478,12 @@ class PopupManager {
       fragment.appendChild(notificationElement);
     });
     
-    container.innerHTML = '';
+    container.replaceChildren();
     container.appendChild(fragment);
   }
 
   renderVirtualScrollNotifications(container) {
-    container.innerHTML = '';
+    container.replaceChildren();
     container.style.height = '400px';
     container.style.overflowY = 'auto';
     
@@ -489,7 +535,7 @@ class PopupManager {
       fragment.appendChild(element);
     }
     
-    viewportContainer.innerHTML = '';
+    viewportContainer.replaceChildren();
     viewportContainer.appendChild(fragment);
   }
 
@@ -511,8 +557,9 @@ class PopupManager {
     const changeSummaryDiv = element.querySelector('.change-summary');
     const actionsDiv = element.querySelector('.notification-actions');
     const advancedPanel = element.querySelector('.advanced-actions-panel');
+    contentDiv.dataset.action = 'open-notification';
     
-    titleDiv.innerHTML = '';
+    titleDiv.replaceChildren();
     
     if (notification.isUpdated) {
       const updateIndicator = document.createElement('span');
@@ -538,7 +585,7 @@ class PopupManager {
     
     titleDiv.appendChild(document.createTextNode(notification.title || ''));
     
-    metaDiv.innerHTML = '';
+    metaDiv.replaceChildren();
     const metaValues = [
       notification.project || '',
       notification.status || '',
@@ -563,7 +610,7 @@ class PopupManager {
 
     this.renderChangeSummary(notification, changeSummaryDiv);
     
-    actionsDiv.innerHTML = '';
+    actionsDiv.replaceChildren();
 
     const moreActionsButton = document.createElement('button');
     moreActionsButton.className = 'more-actions-btn';
@@ -571,10 +618,7 @@ class PopupManager {
       ? this.translate('hideActions')
       : this.translate('moreActions');
     moreActionsButton.textContent = '⋯';
-    moreActionsButton.addEventListener('click', event => {
-      event.stopPropagation();
-      this.toggleAdvancedActions(notification.id);
-    });
+    moreActionsButton.dataset.action = 'more-actions';
     actionsDiv.appendChild(moreActionsButton);
     
     if (!notification.read) {
@@ -582,15 +626,11 @@ class PopupManager {
       markReadBtn.className = 'mark-read-btn';
       markReadBtn.title = this.translate('markAsRead');
       markReadBtn.dataset.notificationId = this.sanitizeAttribute(notification.id);
+      markReadBtn.dataset.action = 'mark-read';
       
       const buttonIcon = document.createElement('span');
       buttonIcon.textContent = '✓';
       markReadBtn.appendChild(buttonIcon);
-      
-      markReadBtn.addEventListener('click', event => {
-        event.stopPropagation();
-        this.markAsRead(notification.id);
-      });
       
       actionsDiv.appendChild(markReadBtn);
     }
@@ -598,10 +638,6 @@ class PopupManager {
     if (this.expandedNotificationId === notification.id) {
       this.renderAdvancedActionsPanel(notification, advancedPanel);
     }
- 
-    contentDiv.addEventListener('click', () => {
-      this.openNotification(notification);
-    });
  
     return element;
   }
@@ -611,7 +647,7 @@ class PopupManager {
       return;
     }
 
-    container.innerHTML = '';
+    container.replaceChildren();
     const changeSummary = Array.isArray(notification.changeSummary)
       ? notification.changeSummary
       : [];
@@ -746,7 +782,7 @@ class PopupManager {
   renderAdvancedActionsPanel(notification, panel) {
     const state = this.getIssueActionState(notification.id);
     panel.hidden = false;
-    panel.innerHTML = '';
+    panel.replaceChildren();
 
     if (state.error) {
       panel.appendChild(this.createMessageElement('action-message error', state.error));
@@ -938,15 +974,11 @@ class PopupManager {
     const submitButton = document.createElement('button');
     submitButton.className = 'advanced-action-button primary combined-submit-button';
     submitButton.textContent = this.translate('submitChanges');
+    submitButton.dataset.action = 'submit-issue-changes';
 
     const updateSubmitState = () => {
       submitButton.disabled = state.isSubmitting || !this.hasPendingIssueChanges(state);
     };
-
-    submitButton.addEventListener('click', event => {
-      event.stopPropagation();
-      this.submitIssueChanges(notification.id);
-    });
 
     updateSubmitState();
     section.appendChild(hint);

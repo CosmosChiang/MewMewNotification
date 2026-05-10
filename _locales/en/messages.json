@@ -408,7 +408,7 @@
     "description": "Label for manifest version in about section"
   },
   "appDescription": {
-    "message": "MewMewNotification - Chrome extension for receiving Redmine notifications efficiently.",
+    "message": "MewMewNotification - Chrome extension for receiving and managing Redmine notifications efficiently and reliably.",
     "description": "Application description"
   },
   "features": {
@@ -416,7 +416,7 @@
     "description": "Features section title"
   },
   "feature1": {
-    "message": "Real-time notification checking",
+    "message": "Efficient Redmine notification checks",
     "description": "Feature 1 description"
   },
   "feature2": {
@@ -424,27 +424,27 @@
     "description": "Feature 2 description"
   },
   "feature3": {
-    "message": "Mark notifications as read",
+    "message": "Unread, read, and all notification inbox views",
     "description": "Feature 3 description"
   },
   "feature4": {
-    "message": "Clear notification history",
+    "message": "Mark notifications as read and clear history",
     "description": "Feature 4 description"
   },
   "feature5": {
-    "message": "Direct links to Redmine issues",
+    "message": "Direct links and quick issue actions",
     "description": "Feature 5 description"
   },
   "feature6": {
-    "message": "Customizable check intervals",
+    "message": "Customizable check intervals and quiet hours",
     "description": "Feature 6 description"
   },
   "feature7": {
-    "message": "Filter by assigned issues",
+    "message": "Project and change-type notification filters",
     "description": "Feature 7 description"
   },
   "feature8": {
-    "message": "Include watched issues",
+    "message": "Assigned and watched issue support",
     "description": "Feature 8 description"
   },
   "feature9": {
@@ -452,11 +452,11 @@
     "description": "Feature 9 description"
   },
   "feature10": {
-    "message": "Auto-detect issue updates",
+    "message": "Batched storage writes and bounded retry handling",
     "description": "Feature 10 description"
   },
   "feature11": {
-    "message": "Badge counter for unread notifications",
+    "message": "Bounded cache and optimized notification rendering",
     "description": "Feature 11 description"
   },
   "support": {

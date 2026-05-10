@@ -530,6 +530,20 @@ describe('ConfigManager', () => {
           }, 15);
         });
       });
+
+      test('should evict the entry with the earliest expiry when cache reaches max size', () => {
+        configManager.maxCacheSize = 2;
+
+        configManager.setCache('oldest', { value: 1 }, 1000);
+        configManager.setCache('newer', { value: 2 }, 2000);
+        configManager.setCache('newest', { value: 3 }, 3000);
+
+        expect(configManager.getFromCache('oldest')).toBeNull();
+        expect(configManager.getFromCache('newer')).toEqual({ value: 2 });
+        expect(configManager.getFromCache('newest')).toEqual({ value: 3 });
+        expect(configManager.cache.size).toBe(2);
+        expect(configManager.cacheExpiry.size).toBe(2);
+      });
     });
 
     describe('clearSettingsCache', () => {
