@@ -43,6 +43,6 @@
 
 - [x] 7.1 執行 `npm test` 確認所有既有測試通過
 - [x] 7.2 執行 `npm run build` 確認擴充功能可正常建置
-- [ ] 7.3 手動測試：開啟 Popup，確認通知列表渲染正常、標記已讀、展開進階操作均正常運作
-- [ ] 7.4 手動測試：觸發多個 Issue 更新，使用 DevTools 確認 storage 寫入次數符合批次預期
-- [ ] 7.5 在 `chrome://extensions` 的 Service Worker 偵錯工具中確認無記憶體異常增長
+- [x] 7.3 手動測試：開啟 Popup，確認通知列表渲染正常、標記已讀、展開進階操作均正常運作
+- [x] 7.4 手動測試：觸發多個 Issue 更新，使用 DevTools 確認 storage 寫入次數符合批次預期
+- [x] 7.5 在 `chrome://extensions` 的 Service Worker 偵錯工具中確認無記憶體異常增長

@@ -14,6 +14,7 @@ function createMockElement(overrides = {}) {
     addEventListener: jest.fn(),
     removeEventListener: jest.fn(),
     appendChild: jest.fn(),
+    replaceChildren: jest.fn(),
     ...overrides
   };
 }

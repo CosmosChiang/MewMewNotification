@@ -4,6 +4,7 @@ class ConfigManager {
     this.cache = new Map();
     this.cacheExpiry = new Map();
     this.defaultCacheTime = 5 * 60 * 1000; // 5 minutes
+    this.maxCacheSize = 100;
   }
 
   static getSyncSettingKeys() {
@@ -313,8 +314,29 @@ class ConfigManager {
   }
 
   setCache(key, value, ttl = this.defaultCacheTime) {
+    if (!this.cache.has(key) && this.cache.size >= this.maxCacheSize) {
+      this._evictOldestCacheEntry();
+    }
+
     this.cache.set(key, value);
     this.cacheExpiry.set(key, Date.now() + ttl);
+  }
+
+  _evictOldestCacheEntry() {
+    let oldestKey;
+    let oldestExpiry = Infinity;
+
+    for (const [key, expiry] of this.cacheExpiry) {
+      if (expiry < oldestExpiry) {
+        oldestKey = key;
+        oldestExpiry = expiry;
+      }
+    }
+
+    if (oldestKey !== undefined) {
+      this.cache.delete(oldestKey);
+      this.cacheExpiry.delete(oldestKey);
+    }
   }
 
   clearSettingsCache() {
