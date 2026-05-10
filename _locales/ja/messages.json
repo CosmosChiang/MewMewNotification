@@ -408,7 +408,7 @@
     "description": "Label for manifest version in about section"
   },
   "appDescription": {
-    "message": "MewMewNotification - Redmine 通知を効率的に受信するための Chrome 拡張機能です。",
+    "message": "MewMewNotification - Redmine 通知を効率的かつ安定して受信・管理するための Chrome 拡張機能です。",
     "description": "Application description"
   },
   "features": {
@@ -416,7 +416,7 @@
     "description": "Features section title"
   },
   "feature1": {
-    "message": "リアルタイム通知チェック",
+    "message": "効率的な Redmine 通知チェック",
     "description": "Feature 1 description"
   },
   "feature2": {
@@ -424,27 +424,27 @@
     "description": "Feature 2 description"
   },
   "feature3": {
-    "message": "通知を既読にマーク",
+    "message": "未読・既読・すべての通知インボックス表示",
     "description": "Feature 3 description"
   },
   "feature4": {
-    "message": "通知履歴を消去",
+    "message": "既読へのマークと通知履歴の消去",
     "description": "Feature 4 description"
   },
   "feature5": {
-    "message": "Redmine 課題への直接リンク",
+    "message": "Redmine 課題への直接リンクとクイック操作",
     "description": "Feature 5 description"
   },
   "feature6": {
-    "message": "カスタマイズ可能なチェック間隔",
+    "message": "カスタマイズ可能なチェック間隔と通知停止時間",
     "description": "Feature 6 description"
   },
   "feature7": {
-    "message": "割り当て課題でフィルタ",
+    "message": "プロジェクトと変更タイプによる通知フィルタ",
     "description": "Feature 7 description"
   },
   "feature8": {
-    "message": "ウォッチ中の課題を含む",
+    "message": "担当課題とウォッチ中課題のサポート",
     "description": "Feature 8 description"
   },
   "feature9": {
@@ -452,11 +452,11 @@
     "description": "Feature 9 description"
   },
   "feature10": {
-    "message": "課題更新の自動検出",
+    "message": "一括ストレージ書き込みと上限付きリトライ処理",
     "description": "Feature 10 description"
   },
   "feature11": {
-    "message": "未読通知のバッジカウンター",
+    "message": "上限付きキャッシュと最適化された通知リスト描画",
     "description": "Feature 11 description"
   },
   "support": {

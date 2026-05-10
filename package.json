@@ -1,6 +1,6 @@
 {
   "name": "mewmewnotification",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "![MewMewNotification Logo](icons/icon128.png)",
   "main": "background.js",
   "directories": {

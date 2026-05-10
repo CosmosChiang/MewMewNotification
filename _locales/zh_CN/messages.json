@@ -408,7 +408,7 @@
     "description": "Label for manifest version in about section"
   },
   "appDescription": {
-    "message": "MewMewNotification - 用于高效接收 Redmine 通知的 Chrome 扩展。",
+    "message": "MewMewNotification - 用于更高效、稳定地接收与管理 Redmine 通知的 Chrome 扩展。",
     "description": "Application description"
   },
   "features": {
@@ -416,7 +416,7 @@
     "description": "Features section title"
   },
   "feature1": {
-    "message": "实时通知检查",
+    "message": "高效 Redmine 通知检查",
     "description": "Feature 1 description"
   },
   "feature2": {
@@ -424,27 +424,27 @@
     "description": "Feature 2 description"
   },
   "feature3": {
-    "message": "标记通知为已读",
+    "message": "未读、已读与全部通知收件箱",
     "description": "Feature 3 description"
   },
   "feature4": {
-    "message": "清除通知历史",
+    "message": "标记已读与清除通知历史",
     "description": "Feature 4 description"
   },
   "feature5": {
-    "message": "直接链接到 Redmine 问题",
+    "message": "Redmine 问题直接链接与快速操作",
     "description": "Feature 5 description"
   },
   "feature6": {
-    "message": "可自定义检查间隔",
+    "message": "可自定义检查间隔与免打扰时段",
     "description": "Feature 6 description"
   },
   "feature7": {
-    "message": "按分配问题过滤",
+    "message": "项目与变更类型通知筛选",
     "description": "Feature 7 description"
   },
   "feature8": {
-    "message": "包含关注的问题",
+    "message": "支持分配与关注的问题",
     "description": "Feature 8 description"
   },
   "feature9": {
@@ -452,11 +452,11 @@
     "description": "Feature 9 description"
   },
   "feature10": {
-    "message": "自动检测问题更新",
+    "message": "批量存储写入与有界重试处理",
     "description": "Feature 10 description"
   },
   "feature11": {
-    "message": "未读通知徽章计数器",
+    "message": "有界缓存与优化通知列表渲染",
     "description": "Feature 11 description"
   },
   "support": {
