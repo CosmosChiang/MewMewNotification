@@ -263,6 +263,7 @@ class PopupManager {
   }
 
   handleNotificationClick(event) {
+    if (!(event.target instanceof Element)) return;
     const actionElement = event.target.closest('[data-action]');
     if (!actionElement) {
       return;

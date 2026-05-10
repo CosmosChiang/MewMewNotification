@@ -13,7 +13,7 @@ Service Worker 的特性（可被 Chrome 強制終止、記憶體受限）使上
 
 **Goals:**
 - 將 issue 狀態的 storage 寫入由迴圈內改為迴圈後一次性批次寫入
-- 為所有快取 Map 加入 LRU 最大容量限制（上限 100 筆）
+- 為所有快取 Map 加入最早到期優先最大容量限制（上限 100 筆）
 - Popup 通知列表改用父容器事件委派，移除個別元素監聽器
 - `makeRequest()` 的 HTTP 429 重試加入最大次數限制（3 次）
 - `readNotifications` 加入最大保留數量（1000 筆）
@@ -37,7 +37,7 @@ Service Worker 的特性（可被 Chrome 強制終止、記憶體受限）使上
 
 ---
 
-### D2：快取 LRU 上限實作位置
+### D2：快取最早到期優先上限實作位置
 
 **決策**：在 `setCache()` 方法內，寫入前檢查 `cache.size >= maxCacheSize`，若超出則刪除 `cacheExpiry` 中到期時間最小的鍵。最大容量設為 100。
 

@@ -16,7 +16,7 @@ The cache (`this.cache`) and cache expiry (`this.cacheExpiry`) Maps in `RedmineA
 - **THEN** a subsequent `getFromCache()` call for that key returns null (cache miss)
 
 ### Requirement: Cache eviction does not affect valid unexpired entries beyond the oldest
-The LRU eviction MUST remove only one entry per insertion (the entry with the smallest expiry value). All other entries SHALL remain accessible.
+The earliest-expiry eviction MUST remove only one entry per insertion (the entry with the smallest expiry value). All other entries SHALL remain accessible.
 
 #### Scenario: Only one entry evicted per insertion
 - **WHEN** the cache is at maximum capacity and one new entry is inserted

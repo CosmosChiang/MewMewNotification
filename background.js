@@ -1748,17 +1748,6 @@ class NotificationManager {
     };
   }
 
-  async persistIssueState(issue) {
-    const result = this.normalizeStorageResult(
-      await chrome.storage.local.get(['issueStates'])
-    );
-    const issueStates = result.issueStates || {};
-
-    issueStates[issue.id] = this.buildIssueSnapshot(issue);
-
-    await chrome.storage.local.set({ issueStates });
-  }
-
   async syncUpdatedIssue(issue) {
     const currentState = this.buildIssueSnapshot(issue);
     const bundlingTarget = this.findBundlingTarget(issue.id, currentState.updatedOn);

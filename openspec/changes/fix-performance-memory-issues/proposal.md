@@ -5,7 +5,7 @@
 ## What Changes
 
 - **批次 Storage 寫入**：移除迴圈內個別 `persistIssueState()` 呼叫，改為迴圈結束後一次性寫入所有狀態
-- **快取大小上限**：為 `RedmineAPI` 與 `ConfigManager` 的 `cache` / `cacheExpiry` Map 加入最大容量限制（LRU 淘汰策略）
+- **快取大小上限**：為 `RedmineAPI` 與 `ConfigManager` 的 `cache` / `cacheExpiry` Map 加入最大容量限制（最早到期優先淘汰策略）
 - **事件委派**：重構 `createNotificationElement()` 改用父容器事件委派，移除每個通知元素上的個別監聽器
 - **有界重試**：為 `makeRequest()` 加入 `retryCount` 參數，HTTP 429 重試上限設為 3 次
 - **已讀通知清理**：為 `readNotifications` 陣列加入最大保留數量（1000 筆），防止 `storage.sync` 超出配額
@@ -15,7 +15,7 @@
 
 ### New Capabilities
 
-- `bounded-cache`: 快取 Map 的最大容量控制與 LRU 淘汰機制
+- `bounded-cache`: 快取 Map 的最大容量控制與最早到期優先淘汰機制
 - `batched-storage-writes`: 批次化 Storage 寫入，避免迴圈內逐筆 I/O
 - `bounded-retry`: HTTP 請求重試次數上限機制
 - `read-notifications-cleanup`: 已讀通知陣列的容量管理與自動清理
