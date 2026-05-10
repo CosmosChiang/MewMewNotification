@@ -13,9 +13,9 @@ matches an explicitly supported development exception policy.
 - **THEN** the extension rejects the configuration and shows a clear security error
 
 ### Requirement: Development exception handling is explicit
-If the extension supports non-HTTPS Redmine URLs for development environments,
-it MUST limit them to explicitly defined cases and present a clear warning
-before those settings are accepted.
+The extension MUST limit supported non-HTTPS Redmine URLs for development
+environments to explicitly defined cases and present a clear warning before
+those settings are accepted.
 
 #### Scenario: Saving a development exception URL
 - **WHEN** a user saves a Redmine URL that matches the allowed development exception policy

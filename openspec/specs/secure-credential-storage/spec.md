@@ -1,3 +1,6 @@
+## Purpose
+Ensure Redmine credentials remain in local-only extension storage and are never exposed through synchronized storage, logs, or user-visible diagnostics.
+
 ## Requirements
 
 ### Requirement: API key storage is local-only
@@ -27,3 +30,20 @@ surfaces shown to the user.
 #### Scenario: Credential-related failure occurs
 - **WHEN** the extension reports an error related to Redmine configuration or connectivity
 - **THEN** the message omits or redacts any API key value
+
+### Requirement: Issue state changes are persisted in a single batched write per check cycle
+The extension MUST accumulate all issue state updates for a notification check cycle
+in memory and write them to `chrome.storage.local` in a single call after the cycle
+completes. Per-issue individual writes inside the processing loop are NOT permitted.
+
+#### Scenario: Multiple issues updated in one cycle
+- **WHEN** a notification check cycle finds state changes in multiple issues
+- **THEN** all updated issue states are written in one `chrome.storage.local.set()` call
+
+### Requirement: Synchronized read-notification list is bounded
+The list of read notification IDs stored in `chrome.storage.sync` SHALL NOT exceed
+1000 entries. Oldest entries are removed first when the limit is reached.
+
+#### Scenario: Read list grows to the limit
+- **WHEN** the number of stored read notification IDs reaches 1000 and a new one is added
+- **THEN** the oldest ID is discarded and the new ID is appended before writing
