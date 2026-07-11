@@ -1,3 +1,7 @@
+## Purpose
+
+Maintain least-privilege extension behavior and actively control dependency, credential, transport, and supply-chain risks.
+
 ## Requirements
 
 ### Requirement: Host access follows least privilege

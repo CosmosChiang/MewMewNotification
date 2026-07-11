@@ -1,3 +1,7 @@
+## Purpose
+
+Define deterministic test organization, coverage expectations, and CI execution for the extension's production surfaces.
+
 ## Requirements
 
 ### Requirement: 統一單元測試結構
