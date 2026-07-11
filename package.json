@@ -15,7 +15,7 @@
     "globals": "^17.7.0",
     "istanbul-lib-instrument": "^6.0.3",
     "jest": "^30.4.2",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^5.2.1",
     "playwright": "^1.61.1"
   },
   "scripts": {
