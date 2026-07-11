@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <title>Settings</title>
@@ -9,16 +9,16 @@
   <div class="container">
     <h1 id="settingsTitle">Settings</h1>
     
-    <div class="tabs">
-      <button class="tab-button active" data-tab="redmine" id="redmineTab">Redmine</button>
-      <button class="tab-button" data-tab="notifications" id="notificationsTab">Notifications</button>
-      <button class="tab-button" data-tab="language" id="languageTab">Language</button>
-      <button class="tab-button" data-tab="about" id="aboutTab">About</button>
+    <div class="tabs" role="tablist" aria-label="Settings sections">
+      <button class="tab-button active" data-tab="redmine" id="redmineTab" role="tab" aria-selected="true" aria-controls="redmine" tabindex="0">Redmine</button>
+      <button class="tab-button" data-tab="notifications" id="notificationsTab" role="tab" aria-selected="false" aria-controls="notifications" tabindex="-1">Notifications</button>
+      <button class="tab-button" data-tab="language" id="languageTab" role="tab" aria-selected="false" aria-controls="language" tabindex="-1">Language</button>
+      <button class="tab-button" data-tab="about" id="aboutTab" role="tab" aria-selected="false" aria-controls="about" tabindex="-1">About</button>
     </div>
     
     <div class="tab-content">
       <!-- Redmine Settings -->
-      <div id="redmine" class="tab-panel active">
+      <div id="redmine" class="tab-panel active" role="tabpanel" aria-labelledby="redmineTab">
         <h2 id="redmineSettingsTitle">Redmine Configuration</h2>
         <div class="form-group">
           <label for="redmineUrl" id="redmineUrlLabel">Redmine URL:</label>
@@ -39,7 +39,7 @@
       </div>
       
       <!-- Notification Settings -->
-      <div id="notifications" class="tab-panel">
+      <div id="notifications" class="tab-panel" role="tabpanel" aria-labelledby="notificationsTab" hidden>
         <h2 id="notificationSettingsTitle">Notification Settings</h2>
         <div class="form-group">
           <label for="checkInterval" id="checkIntervalLabel">Check Interval (minutes):</label>
@@ -189,7 +189,7 @@
       </div>
       
       <!-- Language Settings -->
-      <div id="language" class="tab-panel">
+      <div id="language" class="tab-panel" role="tabpanel" aria-labelledby="languageTab" hidden>
         <h2 id="languageSettingsTitle">Language Settings</h2>
         <div class="form-group">
           <label for="languageSelect" id="languageSelectLabel">Select Language:</label>
@@ -207,7 +207,7 @@
       </div>
       
       <!-- About -->
-      <div id="about" class="tab-panel">
+      <div id="about" class="tab-panel" role="tabpanel" aria-labelledby="aboutTab" hidden>
         <h2 id="aboutTitle">About</h2>
         <div class="about-content">
           <div class="app-header">

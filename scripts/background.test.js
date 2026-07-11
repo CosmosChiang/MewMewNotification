@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { createInstrumenter } = require('istanbul-lib-instrument');
 const { ConfigManager } = require('./shared/config-manager.js');
 
 function createChromeMock() {
@@ -43,6 +44,12 @@ function createChromeMock() {
       getAll: jest.fn(),
       onClicked: {
         addListener: jest.fn()
+      },
+      onButtonClicked: {
+        addListener: jest.fn()
+      },
+      onClosed: {
+        addListener: jest.fn()
       }
     },
     alarms: {
@@ -73,6 +80,9 @@ function createChromeMock() {
         addListener: jest.fn()
       },
       openOptionsPage: jest.fn()
+    },
+    tabs: {
+      create: jest.fn().mockResolvedValue(undefined)
     }
   };
 }
@@ -81,13 +91,14 @@ function loadBackgroundModule(chromeMock) {
   global.chrome = chromeMock;
 
   const filePath = path.join(__dirname, '..', 'background.js');
-  const source = fs.readFileSync(filePath, 'utf8');
+  const source = createInstrumenter({ compact: false }).instrumentSync(fs.readFileSync(filePath, 'utf8'), filePath);
   const sandbox = {
     module: { exports: {} },
     exports: {},
     require,
     console,
     URL,
+    URLSearchParams,
     Date,
     Promise,
     Map,
@@ -95,6 +106,7 @@ function loadBackgroundModule(chromeMock) {
     performance: { now: () => 0 },
     setTimeout,
     clearTimeout,
+    AbortController,
     fetch: global.fetch && global.fetch._isMockFunction
       ? global.fetch
       : jest.fn().mockResolvedValue({
@@ -110,11 +122,12 @@ function loadBackgroundModule(chromeMock) {
     ConfigManager,
     globalThis: {
       ConfigManager
-    }
+    },
+    __coverage__: global.__coverage__ = global.__coverage__ || {}
   };
 
   vm.runInNewContext(
-    `${source}\nmodule.exports = { NotificationManager, RedmineAPI, HOST_PERMISSION_RECOVERY_NOTIFICATION_ID };`,
+    `${source}\nmodule.exports = { NotificationManager, RedmineAPI, HOST_PERMISSION_RECOVERY_NOTIFICATION_ID, ensurePeriodicAlarm, notificationManager, ALARM_NAME, RETRY_ALARM_NAME, RETRY_METADATA_KEY };`,
     sandbox,
     { filename: filePath }
   );
@@ -256,7 +269,9 @@ describe('NotificationManager host permission recovery', () => {
         return manager.settings;
       });
 
-    await expect(manager.checkNotifications()).resolves.toBeUndefined();
+    await expect(manager.checkNotifications()).resolves.toEqual(expect.objectContaining({
+      status: 'failure', errorCode: 'missingRequiredSettings'
+    }));
     expect(manager.loadSettings).toHaveBeenCalled();
   });
 
@@ -293,7 +308,9 @@ describe('NotificationManager host permission recovery', () => {
           windowMinutes: 5
         })
       }));
-      await expect(manager.checkNotifications()).resolves.toBeUndefined();
+      await expect(manager.checkNotifications()).resolves.toEqual(expect.objectContaining({
+        status: 'failure', errorCode: 'missingRequiredSettings'
+      }));
     });
 
   test('loads and caches notification project metadata for options consumers', async () => {
@@ -405,6 +422,28 @@ describe('NotificationManager host permission recovery', () => {
     }));
   });
 
+  test('rejects a stale profile action before creating a Redmine client', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.activeProfile = { profileId: 'profile-b' };
+    manager.profileState = {
+      assertActiveProfile: jest.fn(async profileId => {
+        if (profileId !== 'profile-b') {
+          const error = new Error('profileMismatch');
+          error.code = 'profileMismatch';
+          throw error;
+        }
+      })
+    };
+    manager.createApiClient = jest.fn();
+
+    await expect(manager.applyIssueChanges(1, { statusId: 2 }, 'profile-a')).resolves.toEqual(
+      expect.objectContaining({ success: false, error: 'profileMismatch', status: 'failure' })
+    );
+    expect(manager.createApiClient).not.toHaveBeenCalled();
+  });
+
   test('builds combined issue updates from only changed fields', () => {
     const chromeMock = createChromeMock();
     const { RedmineAPI } = loadBackgroundModule(chromeMock);
@@ -478,10 +517,9 @@ describe('NotificationManager host permission recovery', () => {
 
     const result = await manager.applyIssueChanges(7, { statusId: 3 });
 
-    expect(result).toEqual({
-      success: false,
-      error: 'permissionDenied'
-    });
+    expect(result).toEqual(expect.objectContaining({
+      success: false, error: 'permissionDenied', status: 'failure'
+    }));
   });
 
   test('retains only the newest notification history records when saving', async () => {
@@ -702,7 +740,7 @@ describe('NotificationManager host permission recovery', () => {
     manager.ensureConfiguredHostAccess = jest.fn().mockResolvedValue(undefined);
     manager.showDesktopNotification = jest.fn();
     manager.updateBadge = jest.fn();
-    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssues').mockResolvedValue({
+    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssuesLossless').mockResolvedValue({
       issues: [
         {
           id: 7,
@@ -754,7 +792,7 @@ describe('NotificationManager host permission recovery', () => {
     manager.showDesktopNotification = jest.fn();
     manager.updateBadge = jest.fn();
     jest.spyOn(manager, 'isWithinQuietHours').mockReturnValue(true);
-    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssues').mockResolvedValue({
+    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssuesLossless').mockResolvedValue({
       issues: [
         {
           id: 8,
@@ -820,7 +858,7 @@ describe('NotificationManager host permission recovery', () => {
     manager.ensureConfiguredHostAccess = jest.fn().mockResolvedValue(undefined);
     manager.showDesktopNotification = jest.fn();
     manager.updateBadge = jest.fn();
-    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssues').mockResolvedValue({
+    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssuesLossless').mockResolvedValue({
       issues: [
         {
           id: 9,
@@ -907,7 +945,7 @@ describe('NotificationManager host permission recovery', () => {
     manager.ensureConfiguredHostAccess = jest.fn().mockResolvedValue(undefined);
     manager.showDesktopNotification = jest.fn();
     manager.updateBadge = jest.fn();
-    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssues').mockResolvedValue({
+    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssuesLossless').mockResolvedValue({
       issues: [
         {
           id: 12,
@@ -1007,7 +1045,7 @@ describe('NotificationManager host permission recovery', () => {
     manager.ensureConfiguredHostAccess = jest.fn().mockResolvedValue(undefined);
     manager.showDesktopNotification = jest.fn();
     manager.updateBadge = jest.fn();
-    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssues').mockResolvedValue({
+    const getIssuesSpy = jest.spyOn(RedmineAPI.prototype, 'getIssuesLossless').mockResolvedValue({
       issues: [
         {
           id: 13,
@@ -1064,5 +1102,344 @@ describe('NotificationManager host permission recovery', () => {
       success: false,
       error: 'storage unavailable'
     });
+  });
+});
+
+describe('notification synchronization lifecycle', () => {
+  afterEach(() => {
+    delete global.chrome;
+    jest.useRealTimers();
+  });
+
+  test('coalesces alarm popup and force triggers into one synchronization result', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    let finish;
+    const result = { status: 'success', success: true };
+    manager.checkNotifications = jest.fn(() => new Promise(resolve => { finish = resolve; }));
+
+    const alarm = manager.requestSync('alarm');
+    const popup = manager.requestSync('popup');
+    const force = manager.requestSync('manual', { force: true });
+    expect(alarm).toBe(popup);
+    expect(popup).toBe(force);
+    expect(manager.checkNotifications).toHaveBeenCalledTimes(1);
+    finish(result);
+    await expect(Promise.all([alarm, popup, force])).resolves.toEqual([result, result, result]);
+    expect(manager.checkPromise).toBeNull();
+  });
+
+  test('clears single-flight state after rejection so a later run can start', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.checkNotifications = jest.fn()
+      .mockRejectedValueOnce(new Error('failed'))
+      .mockResolvedValueOnce({ status: 'success' });
+    await expect(manager.requestSync('first')).rejects.toThrow('failed');
+    await expect(manager.requestSync('second')).resolves.toEqual({ status: 'success' });
+    expect(manager.checkNotifications).toHaveBeenCalledTimes(2);
+  });
+
+  test('keeps an unchanged periodic alarm and replaces a changed one', async () => {
+    const chromeMock = createChromeMock();
+    const { ensurePeriodicAlarm, notificationManager } = loadBackgroundModule(chromeMock);
+    notificationManager.loadSettings = jest.fn().mockResolvedValue();
+    notificationManager.settings.checkInterval = 15;
+    chromeMock.alarms.get.mockImplementation((_name, callback) => callback({ periodInMinutes: 15 }));
+    await expect(ensurePeriodicAlarm()).resolves.toEqual(expect.objectContaining({ changed: false }));
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+
+    chromeMock.alarms.get.mockImplementation((_name, callback) => callback({ periodInMinutes: 10 }));
+    await expect(ensurePeriodicAlarm()).resolves.toEqual(expect.objectContaining({ changed: true, periodInMinutes: 15 }));
+    expect(chromeMock.alarms.clear).toHaveBeenCalled();
+    expect(chromeMock.alarms.create).toHaveBeenCalledWith('redmine-notification-check', { periodInMinutes: 15 });
+
+    chromeMock.alarms.create.mockClear();
+    chromeMock.alarms.get.mockImplementation((_name, callback) => callback(undefined));
+    await expect(ensurePeriodicAlarm()).resolves.toEqual(expect.objectContaining({ changed: true }));
+    expect(chromeMock.alarms.create).toHaveBeenCalledWith('redmine-notification-check', { periodInMinutes: 15 });
+  });
+
+  test('aborts timed-out fetch and marks mutation outcome unknown without an open timer', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn((_url, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    }));
+    const chromeMock = createChromeMock();
+    const { RedmineAPI } = loadBackgroundModule(chromeMock);
+    const api = new RedmineAPI('https://redmine.example.com', 'valid-key');
+    const request = api.makeRequest('/issues/1.json', { method: 'PUT', body: '{}' });
+    const rejection = expect(request).rejects.toMatchObject({ message: 'connectionTimeout', code: 'outcomeUnknown' });
+    jest.advanceTimersByTime(30000);
+    await rejection;
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('schedules long rate-limit retry with capped persistent metadata', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.activeProfile = { profileId: 'profile-a' };
+    const metadata = await manager.scheduleRetry({ retryCount: 2, retryAfterSeconds: 999 });
+    expect(metadata).toEqual(expect.objectContaining({ retryCount: 2, profileId: 'profile-a' }));
+    expect(metadata.nextAttemptAt).toBeLessThanOrEqual(Date.now() + 300000);
+    expect(chromeMock.alarms.create).toHaveBeenCalledWith('redmine-notification-retry', { when: metadata.nextAttemptAt });
+  });
+
+  test('maps the sound preference to every desktop notification silent option', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.settings.enableSound = false;
+    await manager.showDesktopNotification([{ id: 'one', title: 'One', project: 'Core' }]);
+    expect(chromeMock.notifications.create.mock.calls.at(-1)[1]).toEqual(expect.objectContaining({ silent: true }));
+    manager.settings.enableSound = true;
+    await manager.showDesktopNotification([{ id: 'one', title: 'One', project: 'Core' }, { id: 'two', title: 'Two', project: 'Core' }]);
+    expect(chromeMock.notifications.create.mock.calls.at(-1)[1]).toEqual(expect.objectContaining({ silent: false }));
+  });
+});
+
+describe('lossless notification synchronization', () => {
+  afterEach(() => delete global.chrome);
+
+  test('processes all 25 paginated updates independently of a display limit of 10', async () => {
+    const chromeMock = createChromeMock();
+    const { RedmineAPI } = loadBackgroundModule(chromeMock);
+    const api = new RedmineAPI('https://redmine.example.com', 'valid-key');
+    api.currentUser = { id: 7 };
+    const allIssues = Array.from({ length: 25 }, (_, index) => ({
+      id: index + 1,
+      updated_on: `2026-07-11T00:${String(index).padStart(2, '0')}:00.000Z`
+    }));
+    api.request = jest.fn(async endpoint => {
+      const url = new URL(`https://redmine.example.com${endpoint}`);
+      const offset = Number(url.searchParams.get('offset'));
+      return { issues: allIssues.slice(offset, offset + 10), total_count: 25, offset, limit: 10 };
+    });
+    const result = await api.getIssuesLossless({ onlyMyProjects: true, cursor: '2026-07-11T00:10:00.000Z' });
+    expect(result.issues).toHaveLength(25);
+    expect(api.request).toHaveBeenCalledTimes(3);
+    const endpoints = api.request.mock.calls.map(call => call[0]);
+    expect(endpoints).toEqual(expect.arrayContaining([
+      expect.stringContaining('offset=0'), expect.stringContaining('offset=10'), expect.stringContaining('offset=20')
+    ]));
+    expect(endpoints[0]).toContain('status_id=*');
+    expect(endpoints[0]).toContain('updated_on=%3E%3D');
+  });
+
+  test('deduplicates equal timestamp events across assigned and watched pages', async () => {
+    const chromeMock = createChromeMock();
+    const { RedmineAPI } = loadBackgroundModule(chromeMock);
+    const api = new RedmineAPI('https://redmine.example.com', 'valid-key');
+    api.currentUser = { id: 7 };
+    api.request = jest.fn().mockResolvedValue({
+      issues: [{ id: 1, updated_on: '2026-07-11T01:00:00.000Z' }], total_count: 1, limit: 100
+    });
+    const result = await api.getIssuesLossless({ onlyMyProjects: true, includeWatchedIssues: true });
+    expect(result.issues).toHaveLength(1);
+    expect(api.request).toHaveBeenCalledTimes(2);
+  });
+
+  test('classifies reconciled 404 and 403 as stable unavailable tombstones', async () => {
+    const chromeMock = createChromeMock();
+    const { RedmineAPI } = loadBackgroundModule(chromeMock);
+    const api = new RedmineAPI('https://redmine.example.com', 'valid-key');
+    api.request = jest.fn()
+      .mockRejectedValueOnce(new Error('Resource not found 404'))
+      .mockRejectedValueOnce(new Error('Access forbidden 403'))
+      .mockResolvedValueOnce({ issue: { id: 3, updated_on: '2026-07-11T02:00:00.000Z', assigned_to: { id: 99 } } });
+    await expect(api.reconcileIssueIds([1, 2, 3])).resolves.toEqual([
+      expect.objectContaining({ id: 1, unavailable: true, errorCode: 'unavailable' }),
+      expect.objectContaining({ id: 2, unavailable: true, errorCode: 'unavailable' }),
+      expect.objectContaining({ id: 3, sourceType: 'reconciled' })
+    ]);
+  });
+
+  test('does not advance cursor when an earlier durable state write fails', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager, RedmineAPI } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.settingsLoaded = true;
+    manager.settings = createNotificationManagerSettings({ maxNotifications: 10 });
+    manager.activeProfile = { profileId: 'profile-a' };
+    manager.resolveActiveProfile = jest.fn().mockResolvedValue(manager.activeProfile);
+    manager.ensureConfiguredHostAccess = jest.fn().mockResolvedValue();
+    const writes = [];
+    manager.profileState = {
+      read: jest.fn(async (_profile, domain, fallback) => domain === 'cursor'
+        ? { watermark: '2026-07-11T00:00:00.000Z', eventIds: [], reconciliationQueue: [], lastFullReconciliationAt: new Date().toISOString() }
+        : fallback),
+      write: jest.fn(async (_profile, domain) => {
+        writes.push(domain);
+        if (domain === 'history') throw new Error('history storage failed');
+      })
+    };
+    jest.spyOn(RedmineAPI.prototype, 'getIssuesLossless').mockResolvedValue({ issues: [], total_count: 0, limit: 100 });
+    const result = await manager.checkNotifications();
+    expect(result).toEqual(expect.objectContaining({ success: false, errorCode: 'syncFailed' }));
+    expect(writes).not.toContain('cursor');
+  });
+
+  test('replays overlap idempotently and tolerates clock skew without duplicate delivery', async () => {
+    const chromeMock = createChromeMock();
+    const localState = { lastSyncTime: '2026-07-11T00:10:00.000Z', issueStates: {}, notificationHistory: [], seenNotifications: [] };
+    chromeMock.storage.local.get.mockImplementation(async keys => {
+      const result = {};
+      (Array.isArray(keys) ? keys : []).forEach(key => { if (localState[key] !== undefined) result[key] = localState[key]; });
+      return result;
+    });
+    chromeMock.storage.local.set.mockImplementation(async values => Object.assign(localState, values));
+    chromeMock.storage.local.remove.mockImplementation(async keys => (Array.isArray(keys) ? keys : [keys]).forEach(key => delete localState[key]));
+    const { NotificationManager, RedmineAPI } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.settingsLoaded = true;
+    manager.settings = createNotificationManagerSettings();
+    manager.showDesktopNotification = jest.fn();
+    const issue = {
+      id: 42, subject: 'Clock skew update', project: { id: 1, name: 'Core' }, author: { name: 'Alice' },
+      status: { name: 'New' }, priority: { name: 'Normal' }, assigned_to: { id: 7, name: 'Alice' },
+      updated_on: '2026-07-11T00:09:30.000Z', sourceType: 'assigned'
+    };
+    jest.spyOn(RedmineAPI.prototype, 'getIssuesLossless').mockResolvedValue({ issues: [issue], total_count: 1, limit: 100 });
+    jest.spyOn(RedmineAPI.prototype, 'reconcileIssueIds').mockResolvedValue([]);
+
+    await manager.checkNotifications();
+    await manager.checkNotifications();
+    expect(manager.showDesktopNotification).toHaveBeenCalledTimes(1);
+    expect(localState.issueStates[42]).toEqual(expect.objectContaining({ subject: 'Clock skew update' }));
+  });
+
+  test('classifies closed and reassigned reconciliation once while applying focus rules', async () => {
+    const chromeMock = createChromeMock();
+    const priorTime = new Date('2026-07-11T00:00:00.000Z').getTime();
+    const localState = {
+      lastSyncTime: '2026-07-11T00:05:00.000Z',
+      issueStates: {
+        1: { subject: 'Close me', status: 'Open', priority: 'Normal', assigneeId: 7, assigneeName: 'Alice', updatedOn: priorTime },
+        2: { subject: 'Move me', status: 'Open', priority: 'Normal', assigneeId: 7, assigneeName: 'Alice', updatedOn: priorTime }
+      }, notificationHistory: [], seenNotifications: []
+    };
+    chromeMock.storage.local.get.mockImplementation(async keys => {
+      const result = {};
+      (Array.isArray(keys) ? keys : []).forEach(key => { if (localState[key] !== undefined) result[key] = localState[key]; });
+      return result;
+    });
+    chromeMock.storage.local.set.mockImplementation(async values => Object.assign(localState, values));
+    chromeMock.storage.local.remove.mockResolvedValue();
+    const { NotificationManager, RedmineAPI } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    manager.settingsLoaded = true;
+    manager.settings = createNotificationManagerSettings({
+      notificationProjectRules: { mode: 'exclude', includeProjectIds: [], excludeProjectIds: [9] }
+    });
+    manager.showDesktopNotification = jest.fn();
+    jest.spyOn(RedmineAPI.prototype, 'getIssuesLossless').mockResolvedValue({ issues: [], total_count: 0, limit: 100 });
+    jest.spyOn(RedmineAPI.prototype, 'reconcileIssueIds').mockResolvedValue([
+      { id: 1, subject: 'Close me', project: { id: 1, name: 'Core' }, author: { name: 'Alice' }, status: { name: 'Closed' }, priority: { name: 'Normal' }, assigned_to: { id: 7, name: 'Alice' }, updated_on: '2026-07-11T00:06:00.000Z', sourceType: 'reconciled' },
+      { id: 2, subject: 'Move me', project: { id: 9, name: 'Excluded' }, author: { name: 'Alice' }, status: { name: 'Open' }, priority: { name: 'Normal' }, assigned_to: { id: 99, name: 'Bob' }, updated_on: '2026-07-11T00:06:00.000Z', sourceType: 'reconciled' }
+    ]);
+
+    await manager.checkNotifications();
+    expect(manager.showDesktopNotification).toHaveBeenCalledWith([
+      expect.objectContaining({ issueId: 1, status: 'Closed', sourceType: 'reconciled' })
+    ], 'updated');
+    expect(localState.issueStates[2]).toEqual(expect.objectContaining({ assigneeId: 99 }));
+  });
+});
+
+describe('desktop notification actions', () => {
+  afterEach(() => delete global.chrome);
+
+  function configureDesktopManager(manager, profileId = 'profile-a') {
+    const state = {
+      desktopMappings: [],
+      history: [{
+        id: 'record-1', profileId, issueId: 1, title: 'Issue 1', project: 'Core',
+        updatedOn: '2026-07-11T00:00:00.000Z', url: 'https://redmine.example.com/issues/1', read: false
+      }],
+      readIds: [],
+      syncHealth: {}
+    };
+    manager.settings = createNotificationManagerSettings();
+    manager.activeProfile = { profileId };
+    manager.profileState = {
+      createBindingId: jest.fn(() => 'opaque-token'),
+      assertActiveProfile: jest.fn(async requested => {
+        if (requested !== manager.activeProfile.profileId) throw new Error('profileMismatch');
+      }),
+      read: jest.fn(async (_profile, domain, fallback) => state[domain] ?? fallback),
+      write: jest.fn(async (_profile, domain, value) => { state[domain] = value; return value; })
+    };
+    return state;
+  }
+
+  test('creates durable single mapping with two buttons and opens it after worker restart', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const first = new NotificationManager();
+    const state = configureDesktopManager(first);
+    await first.showDesktopNotification([state.history[0]], 'new');
+    expect(state.desktopMappings).toEqual([expect.objectContaining({
+      desktopId: 'issue:opaquetoken', profileId: 'profile-a', recordId: 'record-1', type: 'single'
+    })]);
+    expect(chromeMock.notifications.create).toHaveBeenCalledWith(
+      'issue:opaquetoken',
+      expect.objectContaining({ buttons: [{ title: 'openIssue' }, { title: 'markAsRead' }] }),
+      expect.any(Function)
+    );
+
+    const restarted = new NotificationManager();
+    configureDesktopManager(restarted);
+    restarted.profileState.read.mockImplementation(async (_profile, domain, fallback) => state[domain] ?? fallback);
+    await expect(restarted.handleDesktopClick('issue:opaquetoken')).resolves.toBe(true);
+    expect(chromeMock.tabs.create).toHaveBeenCalledWith({ url: 'https://redmine.example.com/issues/1' });
+  });
+
+  test('batch click opens inbox while unknown, expired, invalid and cross-profile mappings open no URL', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    const state = configureDesktopManager(manager);
+    state.desktopMappings = [
+      { desktopId: 'batch:one', profileId: 'profile-a', type: 'batch', expiresAt: Date.now() + 10000 },
+      { desktopId: 'issue:expired', profileId: 'profile-a', recordId: 'record-1', issueUrl: state.history[0].url, type: 'single', expiresAt: Date.now() - 1 },
+      { desktopId: 'issue:invalid', profileId: 'profile-a', recordId: 'record-1', issueUrl: 'https://evil.example/issues/1', type: 'single', expiresAt: Date.now() + 10000 }
+    ];
+    await expect(manager.handleDesktopClick('batch:one')).resolves.toBe(true);
+    await expect(manager.handleDesktopClick('issue:expired')).resolves.toBe(false);
+    await expect(manager.handleDesktopClick('issue:invalid')).resolves.toBe(false);
+    await expect(manager.handleDesktopClick('legacy-id')).resolves.toBe(false);
+    expect(chromeMock.action.openPopup).toHaveBeenCalled();
+    expect(chromeMock.tabs.create).not.toHaveBeenCalled();
+
+    state.desktopMappings = [{ desktopId: 'issue:cross', profileId: 'profile-b', recordId: 'record-1', issueUrl: state.history[0].url, type: 'single', expiresAt: Date.now() + 10000 }];
+    await expect(manager.handleDesktopClick('issue:cross')).resolves.toBe(false);
+    expect(chromeMock.tabs.create).not.toHaveBeenCalled();
+  });
+
+  test('mark-read button is idempotent, clears mapping on success and preserves it on failure', async () => {
+    const chromeMock = createChromeMock();
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    const state = configureDesktopManager(manager);
+    const mapping = await manager.createDesktopMapping(state.history[0], 'single');
+    manager.markAsRead = jest.fn().mockResolvedValue();
+    await expect(manager.handleDesktopButton(mapping.desktopId, 0)).resolves.toBe(true);
+    expect(chromeMock.tabs.create).toHaveBeenCalledWith({ url: state.history[0].url });
+    await expect(manager.handleDesktopButton(mapping.desktopId, 1)).resolves.toBe(true);
+    expect(manager.markAsRead).toHaveBeenCalledWith('record-1', 'profile-a');
+    expect(state.desktopMappings).toEqual([]);
+    await expect(manager.handleDesktopButton(mapping.desktopId, 1)).resolves.toBe(false);
+    expect(manager.markAsRead).toHaveBeenCalledTimes(1);
+
+    const failed = await manager.createDesktopMapping(state.history[0], 'single');
+    manager.markAsRead.mockRejectedValueOnce(new Error('storage failed'));
+    await expect(manager.handleDesktopButton(failed.desktopId, 1)).resolves.toBe(false);
+    expect(state.desktopMappings).toHaveLength(1);
+    expect(state.syncHealth.lastErrorCode).toBe('desktopMarkReadFailed');
+    await manager.removeDesktopMapping(failed.desktopId);
+    expect(state.desktopMappings).toEqual([]);
   });
 });

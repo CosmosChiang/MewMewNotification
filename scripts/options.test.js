@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { createInstrumenter } = require('istanbul-lib-instrument');
 const { ConfigManager } = require('./shared/config-manager.js');
 
 function createMockElement(overrides = {}) {
@@ -100,7 +101,7 @@ function createDocument(elements) {
 
 function loadBrowserClass(relativePath, exportName) {
   const filePath = path.join(__dirname, relativePath);
-  const source = fs.readFileSync(filePath, 'utf8');
+  const source = createInstrumenter({ compact: false }).instrumentSync(fs.readFileSync(filePath, 'utf8'), filePath);
   const sandbox = {
     module: { exports: {} },
     exports: {},
@@ -115,7 +116,8 @@ function loadBrowserClass(relativePath, exportName) {
     fetch: global.fetch,
     confirm: global.confirm,
     alert: global.alert,
-    ConfigManager: global.ConfigManager
+    ConfigManager: global.ConfigManager,
+    __coverage__: global.__coverage__ = global.__coverage__ || {}
   };
 
   vm.runInNewContext(`${source}\nmodule.exports = ${exportName};`, sandbox, {

@@ -1,3 +1,7 @@
+## Purpose
+
+Define safe and permission-aware issue actions available directly from notification cards.
+
 ## Requirements
 
 ### Requirement: issues 資訊卡進階操作

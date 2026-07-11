@@ -1,3 +1,7 @@
+## Purpose
+
+Define the supported-runtime quality, packaging, and release gates required for dependable extension delivery.
+
 ## Requirements
 
 ### Requirement: CI/CD 流程自動化與穩定性

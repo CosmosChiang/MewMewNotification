@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { createInstrumenter } = require('istanbul-lib-instrument');
 
 function createMockElement(overrides = {}) {
   return {
@@ -15,12 +16,16 @@ function createMockElement(overrides = {}) {
     removeEventListener: jest.fn(),
     appendChild: jest.fn(),
     replaceChildren: jest.fn(),
+    setAttribute: jest.fn(),
+    focus: jest.fn(),
+    classList: { add: jest.fn(), remove: jest.fn(), toggle: jest.fn() },
     ...overrides
   };
 }
 
 function createDocument(elements) {
   return {
+    documentElement: { lang: 'en' },
     getElementById: jest.fn((id) => {
       if (!elements[id]) {
         elements[id] = createMockElement();
@@ -37,7 +42,7 @@ function createDocument(elements) {
 
 function loadBrowserClass(relativePath, exportName) {
   const filePath = path.join(__dirname, relativePath);
-  const source = fs.readFileSync(filePath, 'utf8');
+  const source = createInstrumenter({ compact: false }).instrumentSync(fs.readFileSync(filePath, 'utf8'), filePath);
   const sandbox = {
     module: { exports: {} },
     exports: {},
@@ -52,7 +57,8 @@ function loadBrowserClass(relativePath, exportName) {
     chrome: global.chrome,
     fetch: global.fetch,
     confirm: global.confirm,
-    alert: global.alert
+    alert: global.alert,
+    __coverage__: global.__coverage__ = global.__coverage__ || {}
   };
 
   vm.runInNewContext(`${source}\nmodule.exports = ${exportName};`, sandbox, {
@@ -160,6 +166,42 @@ describe('PopupManager', () => {
     ]);
     expect(manager.throttledRender).toHaveBeenCalled();
     expect(elements.loadingIndicator.style.display).toBe('flex');
+  });
+
+  test('loads retained notifications before revalidation and exposes stale health', async () => {
+    manager.renderNotifications = jest.fn();
+    global.chrome.runtime.sendMessage.mockResolvedValue({
+      notifications: [{ id: 'cached-1', read: false }],
+      syncHealth: { lastErrorCode: 'syncFailed', lastSuccessAt: 1 }
+    });
+    await manager.loadCachedNotifications();
+    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      { action: 'getCachedNotifications' }, expect.any(Function)
+    );
+    expect(manager.notifications).toEqual([expect.objectContaining({ id: 'cached-1' })]);
+    expect(manager.renderNotifications).toHaveBeenCalled();
+    expect(global.document.getElementById('syncHealthStatus').textContent).toBe('syncStatusStale');
+  });
+
+  test('renders 100 variable-height records without virtual scroll handlers', () => {
+    const container = createMockElement();
+    const appended = [];
+    global.document.createDocumentFragment.mockReturnValue({ appendChild: element => appended.push(element) });
+    manager.visibleNotifications = Array.from({ length: 100 }, (_, index) => ({ id: `n-${index}` }));
+    manager.createNotificationElement = jest.fn(notification => ({ notification }));
+    manager.renderAllNotifications(container);
+    expect(appended).toHaveLength(100);
+    expect(container.addEventListener).not.toHaveBeenCalledWith('scroll', expect.any(Function));
+  });
+
+  test('supports Arrow, Home and End navigation for inbox tabs', () => {
+    const tabs = ['unread', 'read', 'all'].map(view => createMockElement({ dataset: { view } }));
+    global.document.querySelectorAll = jest.fn(() => tabs);
+    manager.setInboxView = jest.fn();
+    const event = { currentTarget: tabs[0], key: 'End', preventDefault: jest.fn() };
+    manager.handleTabKeydown(event);
+    expect(tabs[2].focus).toHaveBeenCalled();
+    expect(manager.setInboxView).toHaveBeenCalledWith('all');
   });
 
   test('updates the error state when notification loading fails', () => {
@@ -384,7 +426,7 @@ describe('PopupManager', () => {
     expect(appendedRows[1].className).toBe('change-summary-row');
   });
 
-  test('falls back to a regular refresh when force refresh fails', async () => {
+  test('preserves cached state without starting a second refresh when force refresh fails', async () => {
     manager.loadNotifications = jest.fn();
     global.chrome.runtime.sendMessage.mockResolvedValue({
       success: false,
@@ -399,8 +441,8 @@ describe('PopupManager', () => {
       },
       expect.any(Function)
     );
-    expect(manager.loadNotifications).toHaveBeenCalled();
-    expect(elements.refreshBtn.disabled).toBe(true);
+    expect(manager.loadNotifications).not.toHaveBeenCalled();
+    expect(elements.refreshBtn.disabled).toBe(false);
   });
 
   test('does not open tabs for unsafe notification URLs', async () => {
@@ -445,7 +487,9 @@ describe('PopupManager', () => {
     expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith(
       {
         action: 'getIssueActionContext',
-        issueId: 1
+        issueId: 1,
+        notificationId: 'issue_1',
+        profileId: undefined
       },
       expect.any(Function)
     );
@@ -568,6 +612,8 @@ describe('PopupManager', () => {
       {
         action: 'applyIssueChanges',
         issueId: 7,
+        notificationId: 'issue_7',
+        profileId: undefined,
         changes: {
           reply: 'Need **review**',
           statusId: 3

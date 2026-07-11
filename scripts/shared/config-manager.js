@@ -15,7 +15,6 @@ class ConfigManager {
       'enableSound',
       'maxNotifications',
       'language',
-      'readNotifications',
       'onlyMyProjects',
       'includeWatchedIssues',
       'notificationProjectRules',
@@ -467,6 +466,10 @@ class ConfigManager {
     const syncApiKey = typeof syncSettings.apiKey === 'string' ? syncSettings.apiKey : '';
 
     if (localApiKey) {
+      if (globalThis.ProfileStateManager) {
+        const profileState = new globalThis.ProfileStateManager(chrome.storage);
+        await profileState.ensureCredentialBinding(localApiKey);
+      }
       if (syncApiKey) {
         await chrome.storage.sync.remove(['apiKey']);
       }
@@ -479,6 +482,10 @@ class ConfigManager {
     }
 
     await chrome.storage.local.set({ apiKey: syncApiKey });
+    if (globalThis.ProfileStateManager) {
+      const profileState = new globalThis.ProfileStateManager(chrome.storage);
+      await profileState.rotateCredentialBinding(syncApiKey);
+    }
     await chrome.storage.sync.remove(['apiKey']);
     return syncApiKey;
   }
