@@ -18,6 +18,8 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     strategy:
       matrix:
         node-version: [22.x, 24.x]
@@ -37,12 +39,12 @@ jobs:
       - run: npm run audit:high
       - run: npm run openspec:check
       - name: Upload coverage
-        if: matrix.node-version == '24.x'
+        if: matrix.node-version == '24.x' && env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
         with:
           files: ./coverage/lcov.info
           fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
 
   integration:
     runs-on: ubuntu-latest
