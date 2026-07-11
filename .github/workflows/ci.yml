@@ -112,7 +112,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           npm run version:check
-          sha256sum --check dist/mewmew-notification-extension.zip.sha256
+          (cd dist && sha256sum --check mewmew-notification-extension.zip.sha256)
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
