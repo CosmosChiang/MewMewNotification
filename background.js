@@ -1,5 +1,5 @@
 if (typeof importScripts === 'function') {
-  importScripts('scripts/shared/config-manager.js');
+  importScripts('scripts/shared/config-manager.js', 'scripts/shared/profile-state-manager.js');
 }
 
 const HOST_PERMISSION_RECOVERY_NOTIFICATION_ID = 'host-permission-recovery';
@@ -10,6 +10,17 @@ const NOTIFICATION_PROJECT_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_CACHE_SIZE = 100;
 const MAX_REQUEST_RETRIES = 3;
 const MAX_READ_NOTIFICATIONS = 1000;
+const REQUEST_TIMEOUT_MS = 30000;
+const WORKER_SAFE_RETRY_SECONDS = 5;
+const RETRY_ALARM_NAME = 'redmine-notification-retry';
+const RETRY_METADATA_KEY = 'notificationRetryV1';
+const API_PAGE_SIZE = 100;
+const CURSOR_OVERLAP_MS = 2 * 60 * 1000;
+const MAX_ISSUE_STATES = 5000;
+const RECONCILIATION_BUDGET = 20;
+const FULL_RECONCILIATION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DESKTOP_MAPPING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_DESKTOP_MAPPINGS = 100;
 
 class RedmineAPI {
   constructor(baseUrl, apiKey) {
@@ -28,6 +39,7 @@ class RedmineAPI {
     this.defaultCacheTime = 5 * 60 * 1000; // 5 minutes default cache
     this.maxCacheSize = MAX_CACHE_SIZE;
     this.lastSyncTime = null;
+    this.defaultRetryCount = 0;
     this.incrementalSyncEnabled = true;
   }
 
@@ -126,7 +138,7 @@ class RedmineAPI {
     this.isProcessing = false;
   }
 
-  async makeRequest(endpoint, options = {}, retryCount = 0) {
+  async makeRequest(endpoint, options = {}, retryCount = this.defaultRetryCount) {
     // Security validation
     this.validateApiEndpoint(endpoint);
     
@@ -137,18 +149,14 @@ class RedmineAPI {
       ...options.headers
     };
 
-    // Create a timeout promise
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('connectionTimeout')), 30000); // 30 second timeout
-    });
-
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort('connectionTimeout'), REQUEST_TIMEOUT_MS);
     try {
-      const fetchPromise = fetch(url, {
+      const response = await fetch(url, {
         ...options,
-        headers
+        headers,
+        signal: controller.signal
       });
-
-      const response = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (response.status === 429) {
         if (retryCount >= MAX_REQUEST_RETRIES) {
@@ -157,6 +165,12 @@ class RedmineAPI {
 
         // Rate limited - wait and retry
         const retryAfter = Math.min(Number.parseInt(response.headers.get('Retry-After'), 10) || 60, 300);
+        if (retryAfter > WORKER_SAFE_RETRY_SECONDS) {
+          const error = new Error('rateLimitRetryScheduled');
+          error.retryAfterSeconds = retryAfter;
+          error.retryCount = retryCount + 1;
+          throw error;
+        }
         console.warn(`Rate limited. Waiting ${retryAfter} seconds before retry.`);
         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
         return this.makeRequest(endpoint, options, retryCount + 1);
@@ -171,7 +185,7 @@ class RedmineAPI {
           if (errorBody) {
             errorDetails = ` - ${errorBody}`;
           }
-        } catch (e) {
+        } catch (_e) {
           // Ignore error reading response body
         }
         
@@ -191,7 +205,7 @@ class RedmineAPI {
                   ? errorJson.errors.join(', ') 
                   : JSON.stringify(errorJson.errors);
               }
-            } catch (e) {
+            } catch (_e) {
               // If not JSON, use the raw error body
               specificError = errorBody.substring(0, 200); // Limit length
             }
@@ -221,7 +235,7 @@ class RedmineAPI {
       let result;
       try {
         result = JSON.parse(responseText);
-      } catch (parseError) {
+      } catch (_parseError) {
         throw new Error('Invalid response format');
       }
       
@@ -235,8 +249,10 @@ class RedmineAPI {
       console.error('Redmine API request failed:', error);
       
       // Handle specific error types
-      if (error.message === 'connectionTimeout') {
-        throw new Error('connectionTimeout');
+      if (error.name === 'AbortError' || controller.signal.aborted) {
+        const timeoutError = new Error('connectionTimeout');
+        timeoutError.code = options.method && options.method !== 'GET' ? 'outcomeUnknown' : 'connectionTimeout';
+        throw timeoutError;
       }
       
       // Handle network errors with retry logic
@@ -245,6 +261,8 @@ class RedmineAPI {
       }
       
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -446,6 +464,50 @@ class RedmineAPI {
       offset: 0,
       limit: limit
     };
+  }
+
+  async getIssuesLossless({ onlyMyProjects = true, includeWatchedIssues = false, cursor = null } = {}) {
+    const currentUser = await this.getCurrentUser();
+    const sources = [];
+    if (onlyMyProjects) sources.push({ assigned_to_id: currentUser.id, sourceType: 'assigned' });
+    if (includeWatchedIssues) sources.push({ watcher_id: currentUser.id, sourceType: 'watched' });
+    if (sources.length === 0) sources.push({ sourceType: 'all' });
+    const byEvent = new Map();
+    for (const source of sources) {
+      let offset = 0;
+      let totalCount = Infinity;
+      while (offset < totalCount) {
+        const params = new URLSearchParams({ status_id: '*', sort: 'updated_on:asc,id:asc', limit: String(API_PAGE_SIZE), offset: String(offset) });
+        if (source.assigned_to_id) params.set('assigned_to_id', String(source.assigned_to_id));
+        if (source.watcher_id) params.set('watcher_id', String(source.watcher_id));
+        if (cursor) params.set('updated_on', `>=${new Date(new Date(cursor).getTime() - CURSOR_OVERLAP_MS).toISOString()}`);
+        const response = await this.request(`/issues.json?${params.toString()}`);
+        const page = Array.isArray(response.issues) ? response.issues : [];
+        totalCount = Number.isFinite(response.total_count) ? response.total_count : offset + page.length;
+        page.forEach(issue => {
+          const key = `${issue.id}:${new Date(issue.updated_on).toISOString()}`;
+          if (!byEvent.has(key)) byEvent.set(key, { ...issue, sourceType: source.sourceType });
+        });
+        if (!page.length) break;
+        offset += Number(response.limit) || API_PAGE_SIZE;
+      }
+    }
+    const issues = Array.from(byEvent.values()).sort((a, b) => new Date(a.updated_on) - new Date(b.updated_on) || a.id - b.id);
+    return { issues, total_count: issues.length, offset: 0, limit: API_PAGE_SIZE };
+  }
+
+  async reconcileIssueIds(issueIds) {
+    const results = [];
+    for (const issueId of issueIds.slice(0, RECONCILIATION_BUDGET)) {
+      try {
+        const response = await this.request(`/issues/${issueId}.json`);
+        if (response.issue) results.push({ ...response.issue, sourceType: 'reconciled' });
+      } catch (error) {
+        if (/not found|forbidden|404|403/i.test(error.message)) results.push({ id: Number(issueId), unavailable: true, sourceType: 'reconciled', errorCode: 'unavailable' });
+        else throw error;
+      }
+    }
+    return results;
   }
 
   parsePositiveInteger(value, fieldName = 'identifier') {
@@ -833,6 +895,10 @@ class NotificationManager {
     this.settingsLoadPromise = undefined;
     this.translations = {};
     this.currentLanguage = 'en';
+    const profileStateManagerClass = globalThis.ProfileStateManager;
+    this.profileState = profileStateManagerClass ? new profileStateManagerClass(chrome.storage) : null;
+    this.activeProfile = null;
+    this.checkPromise = null;
     this.loadSettings().catch(error => {
       console.error('Failed to preload settings:', error);
     });
@@ -937,6 +1003,13 @@ class NotificationManager {
   }
 
   async loadCachedNotificationProjects(redmineUrl) {
+    if (this.activeProfile && this.profileState) {
+      const cacheEntry = await this.profileState.read(this.activeProfile.profileId, 'projectCache', null);
+      if (!cacheEntry || cacheEntry.redmineUrl !== redmineUrl) return undefined;
+      const fetchedAt = Number(cacheEntry.fetchedAt);
+      if (!Number.isFinite(fetchedAt) || Date.now() - fetchedAt > NOTIFICATION_PROJECT_CACHE_TTL_MS) return undefined;
+      return { cached: true, projects: this.normalizeProjectMetadataRecords(cacheEntry.projects) };
+    }
     const result = this.normalizeStorageResult(
       await chrome.storage.local.get([NOTIFICATION_PROJECT_CACHE_STORAGE_KEY])
     );
@@ -960,13 +1033,12 @@ class NotificationManager {
 
   async saveNotificationProjectsCache(redmineUrl, projects) {
     const normalizedProjects = this.normalizeProjectMetadataRecords(projects);
-    await chrome.storage.local.set({
-      [NOTIFICATION_PROJECT_CACHE_STORAGE_KEY]: {
-        redmineUrl,
-        fetchedAt: Date.now(),
-        projects: normalizedProjects
-      }
-    });
+    const cacheEntry = { redmineUrl, fetchedAt: Date.now(), projects: normalizedProjects };
+    if (this.activeProfile && this.profileState) {
+      await this.profileState.write(this.activeProfile.profileId, 'projectCache', cacheEntry);
+    } else {
+      await chrome.storage.local.set({ [NOTIFICATION_PROJECT_CACHE_STORAGE_KEY]: cacheEntry });
+    }
 
     return normalizedProjects;
   }
@@ -1019,6 +1091,7 @@ class NotificationManager {
 
     return {
       id,
+      profileId: typeof record.profileId === 'string' ? record.profileId : '',
       issueId: Number.isInteger(record.issueId) ? record.issueId : undefined,
       title: typeof record.title === 'string' ? record.title : '',
       project: typeof record.project === 'string' ? record.project : '',
@@ -1062,6 +1135,10 @@ class NotificationManager {
   }
 
   async loadNotificationHistory() {
+    if (this.activeProfile && this.profileState) {
+      const history = await this.profileState.read(this.activeProfile.profileId, 'history', []);
+      return this.applyNotificationHistoryRetention(history);
+    }
     const result = this.normalizeStorageResult(
       await chrome.storage.local.get([this.notificationHistoryStorageKey])
     );
@@ -1078,9 +1155,11 @@ class NotificationManager {
       .map(record => this.serializeNotificationHistoryRecord(record))
       .filter(Boolean);
 
-    await chrome.storage.local.set({
-      [this.notificationHistoryStorageKey]: serializedHistory
-    });
+    if (this.activeProfile && this.profileState) {
+      await this.profileState.write(this.activeProfile.profileId, 'history', serializedHistory);
+    } else {
+      await chrome.storage.local.set({ [this.notificationHistoryStorageKey]: serializedHistory });
+    }
 
     return retainedHistory;
   }
@@ -1126,6 +1205,7 @@ class NotificationManager {
   }
 
   async loadSettingsInternal({ notifyPermissionRecovery = false } = {}) {
+    const settingsAtStart = this.settings;
     const configManagerClass = globalThis.ConfigManager;
     if (configManagerClass?.migrateLegacyApiKey) {
       await configManagerClass.migrateLegacyApiKey();
@@ -1149,9 +1229,13 @@ class NotificationManager {
       chrome.storage.local.get(['apiKey'])
     ]);
 
-    this.settings = configManagerClass?.normalizeRuntimeSettings
+    const loadedSettings = configManagerClass?.normalizeRuntimeSettings
       ? configManagerClass.normalizeRuntimeSettings(syncResult, localResult)
       : this.getDefaultSettings();
+    // Do not let an older asynchronous load overwrite settings explicitly replaced
+    // while storage reads were in flight (for example immediately after saving credentials).
+    if (this.settings !== settingsAtStart) return this.settings;
+    this.settings = loadedSettings;
     this.settingsLoaded = true;
 
     await this.syncHostPermissionRecoveryState({ notify: notifyPermissionRecovery });
@@ -1179,6 +1263,47 @@ class NotificationManager {
 
     await this.loadSettings();
     return this.settings;
+  }
+
+  async resolveActiveProfile(apiClient) {
+    if (!this.profileState) return null;
+    const api = apiClient || await this.createApiClient();
+    const user = await api.getCurrentUser();
+    const identity = await this.profileState.createProfileIdentity(
+      this.settings.redmineUrl, user.id, this.settings.apiKey
+    );
+    if (this.activeProfile?.profileId === identity.profileId) return this.activeProfile;
+    if (this.activeProfile?.profileId && this.activeProfile.profileId !== identity.profileId) {
+      await this.clearRetryMetadata();
+    }
+    this.activeProfile = await this.profileState.initializeAndActivate(identity);
+    this.settings.readNotifications = await this.profileState.read(identity.profileId, 'readIds', []);
+    this.notifications.clear();
+    return this.activeProfile;
+  }
+
+  async restoreActiveProfile() {
+    if (!this.profileState || !this.settings.redmineUrl) return null;
+    const restored = await this.profileState.restoreActiveProfile(this.settings.redmineUrl);
+    if (restored) {
+      this.activeProfile = restored;
+      this.settings.readNotifications = await this.profileState.read(restored.profileId, 'readIds', []);
+    }
+    return restored;
+  }
+
+  async requireProfile(profileId = this.activeProfile?.profileId) {
+    if (!this.activeProfile) await this.resolveActiveProfile();
+    await this.profileState?.assertActiveProfile(profileId);
+    return this.activeProfile;
+  }
+
+  async assertNotificationOwnership(notificationId, profileId) {
+    await this.requireProfile(profileId);
+    if (!notificationId) return;
+    const history = await this.loadNotificationHistory();
+    const record = this.notifications.get(notificationId) || history.find(item => item.id === notificationId);
+    if (!record || record.profileId !== this.activeProfile.profileId) throw new Error('profileMismatch');
   }
 
   resolveErrorMessage(message) {
@@ -1374,6 +1499,10 @@ class NotificationManager {
       throw new Error('missingRequiredSettings');
     }
 
+    const api = await this.createApiClient();
+    await this.restoreActiveProfile();
+    if (!this.activeProfile) await this.resolveActiveProfile(api);
+
     if (!forceRefresh) {
       const cachedProjects = await this.loadCachedNotificationProjects(this.settings.redmineUrl);
       if (cachedProjects) {
@@ -1381,7 +1510,6 @@ class NotificationManager {
       }
     }
 
-    const api = await this.createApiClient();
     const response = await api.getProjects();
     const projects = await this.saveNotificationProjectsCache(this.settings.redmineUrl, response.projects);
 
@@ -1400,6 +1528,7 @@ class NotificationManager {
         ? existingNotification.id
         : this.createNotificationRecordId(issue, updatedOn),
       issueId: issue.id,
+      profileId: this.activeProfile?.profileId || existingNotification.profileId || '',
       title: `#${issue.id}: ${issue.subject}`,
       project: issue.project?.name || this.translate('unknownProject'),
       author: issue.author?.name || this.translate('unknownAuthor'),
@@ -1820,8 +1949,9 @@ class NotificationManager {
     return this.resolveErrorMessage(error.message || String(error));
   }
 
-  async getIssueActionContext(issueId) {
+  async getIssueActionContext(issueId, profileId, notificationId) {
     try {
+      await this.assertNotificationOwnership(notificationId, profileId);
       const api = await this.createApiClient();
       const context = await api.getIssueActionContext(issueId);
 
@@ -1832,13 +1962,16 @@ class NotificationManager {
     } catch (error) {
       return {
         success: false,
-        error: this.resolveIssueActionError(error)
+        error: this.resolveIssueActionError(error),
+        status: error.code === 'outcomeUnknown' ? 'outcomeUnknown' : 'failure',
+        requiresRefetch: error.code === 'outcomeUnknown'
       };
     }
   }
 
-  async executeIssueAction(issueId, actionCallback) {
+  async executeIssueAction(issueId, profileId, notificationId, actionCallback) {
     try {
+      await this.assertNotificationOwnership(notificationId, profileId);
       const api = await this.createApiClient();
       await actionCallback(api);
 
@@ -1853,21 +1986,67 @@ class NotificationManager {
     } catch (error) {
       return {
         success: false,
-        error: this.resolveIssueActionError(error)
+        error: this.resolveIssueActionError(error),
+        status: error.code === 'outcomeUnknown' ? 'outcomeUnknown' : 'failure',
+        requiresRefetch: error.code === 'outcomeUnknown'
       };
     }
   }
 
-  async applyIssueChanges(issueId, changes) {
-    return this.executeIssueAction(issueId, api => api.applyIssueChanges(issueId, changes));
+  async applyIssueChanges(issueId, changes, profileId, notificationId) {
+    return this.executeIssueAction(issueId, profileId, notificationId, api => api.applyIssueChanges(issueId, changes));
   }
 
-  async checkNotifications() {
+  createSyncResult(status, details = {}) {
+    return {
+      status,
+      success: status === 'success',
+      stale: details.stale === true,
+      startedAt: details.startedAt || new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      lastSuccessAt: details.lastSuccessAt || null,
+      errorCode: details.errorCode || null,
+      retry: details.retry || null,
+      trigger: details.trigger || 'unknown'
+    };
+  }
+
+  requestSync(trigger = 'unknown', { force = false } = {}) {
+    if (this.checkPromise) return this.checkPromise;
+    const startedAt = new Date().toISOString();
+    this.checkPromise = (async () => {
+      if (force && this.activeProfile && this.profileState) {
+        await this.profileState.write(this.activeProfile.profileId, 'seenIds', []);
+      }
+      return this.checkNotifications({ trigger, startedAt });
+    })().finally(() => {
+      this.checkPromise = null;
+    });
+    return this.checkPromise;
+  }
+
+  async scheduleRetry(error) {
+    const retryCount = Math.min(Number(error.retryCount) || 1, MAX_REQUEST_RETRIES);
+    const retryAfterSeconds = Math.min(Number(error.retryAfterSeconds) || 60, 300);
+    if (retryCount > MAX_REQUEST_RETRIES) throw new Error('rateLimitRetryExceeded');
+    const nextAttemptAt = Date.now() + retryAfterSeconds * 1000;
+    const metadata = { retryCount, nextAttemptAt, profileId: this.activeProfile?.profileId || null };
+    await chrome.storage.local.set({ [RETRY_METADATA_KEY]: metadata });
+    chrome.alarms.create(RETRY_ALARM_NAME, { when: nextAttemptAt });
+    return metadata;
+  }
+
+  async clearRetryMetadata() {
+    await chrome.storage.local.remove([RETRY_METADATA_KEY]);
+    await new Promise(resolve => chrome.alarms.clear(RETRY_ALARM_NAME, () => resolve()));
+  }
+
+  async checkNotifications({ trigger = 'direct', startedAt = new Date().toISOString() } = {}) {
     await this.ensureSettingsLoaded();
 
     if (!this.settings.redmineUrl || !this.settings.apiKey) {
       console.log('Redmine settings not configured');
-      return;
+      return this.createSyncResult('failure', { trigger, startedAt, errorCode: 'missingRequiredSettings' });
     }
 
     console.log('Checking notifications...', {
@@ -1882,24 +2061,31 @@ class NotificationManager {
       await this.ensureConfiguredHostAccess();
       
       const api = new RedmineAPI(this.settings.redmineUrl, this.settings.apiKey);
-      
-      // Load last sync time from storage
-      const syncData = await chrome.storage.local.get(['lastSyncTime']);
-      if (syncData.lastSyncTime) {
-        api.lastSyncTime = new Date(syncData.lastSyncTime);
+      await this.resolveActiveProfile(api);
+      const retryState = await chrome.storage.local.get([RETRY_METADATA_KEY]);
+      const retryMetadata = retryState?.[RETRY_METADATA_KEY];
+      if (retryMetadata && retryMetadata.profileId === (this.activeProfile?.profileId || null)) {
+        api.defaultRetryCount = Math.min(Number(retryMetadata.retryCount) || 0, MAX_REQUEST_RETRIES);
       }
       
-      const response = await api.getIssues(
-        this.settings.maxNotifications, 
-        this.settings.onlyMyProjects,
-        this.settings.includeWatchedIssues,
-        true // Enable incremental sync
-      );
+      // Load last sync time from storage
+      const cursor = this.profileState
+        ? await this.profileState.read(this.activeProfile.profileId, 'cursor', null)
+        : (await chrome.storage.local.get(['lastSyncTime'])).lastSyncTime;
+      const cursorState = cursor && typeof cursor === 'object'
+        ? cursor
+        : { watermark: cursor || null, eventIds: [], reconciliationQueue: [], lastFullReconciliationAt: null };
+      if (cursorState.watermark) api.lastSyncTime = new Date(cursorState.watermark);
+      
+      const response = await api.getIssuesLossless({
+        onlyMyProjects: this.settings.onlyMyProjects,
+        includeWatchedIssues: this.settings.includeWatchedIssues,
+        cursor: cursorState.watermark
+      });
       
       // Update last sync time
       const currentSyncTime = new Date();
       api.lastSyncTime = currentSyncTime;
-      await chrome.storage.local.set({ lastSyncTime: currentSyncTime.toISOString() });
       
       const apiDuration = performance.now() - startTime;
       if (apiDuration > 5000) {
@@ -1921,10 +2107,9 @@ class NotificationManager {
       const updatedNotifications = [];
 
       // Get previous issue states for comparison
-      const result = this.normalizeStorageResult(
-        await chrome.storage.local.get(['issueStates'])
-      );
-      const previousIssueStates = result.issueStates || {};
+      const previousIssueStates = this.profileState
+        ? await this.profileState.read(this.activeProfile.profileId, 'issueStates', {})
+        : this.normalizeStorageResult(await chrome.storage.local.get(['issueStates'])).issueStates || {};
       const existingHistory = await this.loadNotificationHistory();
       const existingHistoryById = new Map(existingHistory.map(record => [record.id, record]));
       this.notifications = new Map(existingHistory.map(record => [record.id, record]));
@@ -1932,9 +2117,32 @@ class NotificationManager {
       console.log('Previous issue states count:', Object.keys(previousIssueStates).length);
       console.log('Current issues count:', issues.length);
 
-      // Clear error state if successful
-      await chrome.storage.local.set({ lastError: null, lastErrorCode: null, lastErrorTime: null });
-      
+      const currentIssueIds = new Set(issues.map(issue => String(issue.id)));
+      const trackedIds = Object.keys(previousIssueStates);
+      const dueForFullReconciliation = Boolean(cursorState.watermark) && (
+        !cursorState.lastFullReconciliationAt
+        || Date.now() - new Date(cursorState.lastFullReconciliationAt).getTime() >= FULL_RECONCILIATION_INTERVAL_MS
+      );
+      const missingIds = Array.from(new Set([
+        ...(Array.isArray(cursorState.reconciliationQueue) ? cursorState.reconciliationQueue : []),
+        ...trackedIds.filter(issueId => dueForFullReconciliation || !currentIssueIds.has(String(issueId)))
+      ]));
+      const reconciliationResults = missingIds.length ? await api.reconcileIssueIds(missingIds) : [];
+      reconciliationResults.forEach(result => {
+        if (result.unavailable) {
+          const previous = previousIssueStates[result.id] || {};
+          previousIssueStates[result.id] = {
+            ...previous,
+            unavailable: true,
+            unavailableCode: result.errorCode,
+            unavailableAt: previous.unavailableAt || Date.now()
+          };
+        } else {
+          const eventKey = `${result.id}:${new Date(result.updated_on).toISOString()}`;
+          if (!issues.some(issue => `${issue.id}:${new Date(issue.updated_on).toISOString()}` === eventKey)) issues.push(result);
+        }
+      });
+
       // Create a copy of readNotifications to avoid modifying the original during iteration
       const readNotificationsCopy = [...this.settings.readNotifications];
       const updatedReadNotifications = [...this.settings.readNotifications];
@@ -2032,14 +2240,15 @@ class NotificationManager {
       // Update read notifications in storage only once after processing all issues
       if (updatedReadNotifications.length !== this.settings.readNotifications.length) {
         this.settings.readNotifications = updatedReadNotifications;
-        await chrome.storage.sync.set({ readNotifications: updatedReadNotifications });
+        if (this.profileState) await this.profileState.write(this.activeProfile.profileId, 'readIds', updatedReadNotifications);
+        else await chrome.storage.sync.set({ readNotifications: updatedReadNotifications });
       }
 
-      try {
-        await chrome.storage.local.set({ issueStates: previousIssueStates });
-      } catch (error) {
-        console.error('Failed to persist issue states:', error);
-      }
+      const retainedIssueStates = Object.fromEntries(Object.entries(previousIssueStates)
+        .sort(([, left], [, right]) => Number(right.updatedOn || 0) - Number(left.updatedOn || 0))
+        .slice(0, MAX_ISSUE_STATES));
+      if (this.profileState) await this.profileState.write(this.activeProfile.profileId, 'issueStates', retainedIssueStates);
+      else await chrome.storage.local.set({ issueStates: retainedIssueStates });
 
       await this.mergeNotificationHistory(
         Array.from(this.notifications.values()),
@@ -2049,27 +2258,44 @@ class NotificationManager {
       console.log('New notifications:', newNotifications.length);
       console.log('Updated notifications:', updatedNotifications.length);
 
-      // Show notifications for new issues
-      if (newNotifications.length > 0 && this.settings.enableNotifications) {
-        console.log('Showing new notifications');
-        this.showDesktopNotification(newNotifications, 'new');
-      }
-
-      // Show notifications for updated issues
-      if (updatedNotifications.length > 0 && this.settings.enableNotifications) {
-        console.log('Showing updated notifications');
-        this.showDesktopNotification(updatedNotifications, 'updated');
-      }
-
       // Update badge
       const unreadCount = Array.from(this.notifications.values()).filter(n => !n.read).length;
       this.updateBadge(unreadCount);
 
       // Store seen notifications
       const seenNotifications = Array.from(this.notifications.keys());
-      await chrome.storage.local.set({ seenNotifications });
+      if (this.profileState) await this.profileState.write(this.activeProfile.profileId, 'seenIds', seenNotifications);
+      else await chrome.storage.local.set({ seenNotifications });
+
+      const processedReconciliationIds = new Set(reconciliationResults.map(issue => String(issue.id)));
+      const nextCursor = {
+        version: 1,
+        watermark: currentSyncTime.toISOString(),
+        eventIds: issues.filter(issue => issue.updated_on).map(issue =>
+          `${this.activeProfile?.profileId || 'legacy'}:${issue.id}:${new Date(issue.updated_on).toISOString()}`).slice(-5000),
+        reconciliationQueue: missingIds.filter(id => !processedReconciliationIds.has(String(id))),
+        lastFullReconciliationAt: dueForFullReconciliation
+          ? currentSyncTime.toISOString()
+          : cursorState.lastFullReconciliationAt
+      };
+      const successfulAt = Date.now();
+      if (this.profileState) await this.profileState.write(this.activeProfile.profileId, 'syncHealth', {
+        version: 1, lastSuccessAt: successfulAt, lastErrorCode: null, lastErrorAt: null,
+        stale: false, retry: null
+      });
+      else await chrome.storage.local.set({ lastError: null, lastErrorCode: null, lastErrorTime: null, lastSuccessAt: successfulAt });
+      // Commit watermark last; any earlier storage failure preserves the previous cursor.
+      if (this.profileState) await this.profileState.write(this.activeProfile.profileId, 'cursor', nextCursor);
+      else await chrome.storage.local.set({ lastSyncTime: nextCursor.watermark });
+
+      if (newNotifications.length > 0 && this.settings.enableNotifications) await this.showDesktopNotification(newNotifications, 'new');
+      if (updatedNotifications.length > 0 && this.settings.enableNotifications) await this.showDesktopNotification(updatedNotifications, 'updated');
 
       console.log('Notification check completed. Unread count:', unreadCount);
+      await this.clearRetryMetadata();
+      return this.createSyncResult('success', {
+        trigger, startedAt, lastSuccessAt: new Date().toISOString()
+      });
 
     } catch (error) {
       console.error('Failed to check notifications:', error);
@@ -2078,14 +2304,17 @@ class NotificationManager {
       let errorMessage = this.resolveErrorMessage(error.message);
       let errorCode = null;
       let shouldRetry = true;
+      if (error.message === 'rateLimitRetryScheduled') {
+        const retry = await this.scheduleRetry(error);
+        return this.createSyncResult('retryScheduled', {
+          trigger, startedAt, stale: (await this.loadNotificationHistory()).length > 0,
+          errorCode: 'rateLimited', retry
+        });
+      }
       
       if (error.message.includes('422')) {
         errorMessage = 'Invalid API parameters - check your Redmine configuration';
         shouldRetry = false; // Don't retry 422 errors immediately
-        
-        // Clear incremental sync data to force full sync next time
-        await chrome.storage.local.remove(['lastSyncTime']);
-        console.log('Cleared incremental sync data due to 422 error');
         
       } else if (error.message.includes('401')) {
         errorMessage = 'Authentication failed - please check your API key';
@@ -2101,6 +2330,10 @@ class NotificationManager {
         
       } else if (error.message.includes('connectionTimeout')) {
         errorMessage = 'Connection timeout - Redmine server may be slow';
+      } else if (error.message === 'rateLimitRetryExceeded') {
+        errorMessage = 'Rate limit retry limit reached';
+        errorCode = 'rateLimitRetryExceeded';
+        shouldRetry = false;
         
       } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
         errorMessage = 'Network error - check your internet connection';
@@ -2112,12 +2345,20 @@ class NotificationManager {
       }
       
       // Store error information for debugging
-      await chrome.storage.local.set({ 
-        lastError: errorMessage,
-        lastErrorCode: errorCode,
-        lastErrorTime: Date.now(),
-        shouldRetry: shouldRetry
-      });
+      if (this.activeProfile && this.profileState) {
+        const previousHealth = await this.profileState.read(this.activeProfile.profileId, 'syncHealth', {});
+        await this.profileState.write(this.activeProfile.profileId, 'syncHealth', {
+          version: 1,
+          lastSuccessAt: previousHealth.lastSuccessAt || null,
+          lastErrorCode: errorCode || 'syncFailed',
+          lastErrorAt: Date.now(),
+          shouldRetry,
+          stale: true,
+          retry: null
+        });
+      } else {
+        await chrome.storage.local.set({ lastError: errorMessage, lastErrorCode: errorCode, lastErrorTime: Date.now(), shouldRetry });
+      }
       
       // Update badge to show error state
       chrome.action.setBadgeText({ text: '!' });
@@ -2125,10 +2366,19 @@ class NotificationManager {
       chrome.action.setTitle({ title: `Error: ${errorMessage}` });
       
       console.log(`Error handling completed. Should retry: ${shouldRetry}`);
+      if (!shouldRetry) await this.clearRetryMetadata();
+      const stale = (await this.loadNotificationHistory()).length > 0;
+      return this.createSyncResult(stale ? 'stale' : 'failure', {
+        trigger, startedAt, stale, errorCode: error.code || errorCode || 'syncFailed'
+      });
     }
   }
 
   async hasSeenNotification(notificationId) {
+    if (this.activeProfile && this.profileState) {
+      const seen = await this.profileState.read(this.activeProfile.profileId, 'seenIds', []);
+      return seen.includes(notificationId);
+    }
     const result = this.normalizeStorageResult(
       await chrome.storage.local.get(['seenNotifications'])
     );
@@ -2136,22 +2386,119 @@ class NotificationManager {
     return seenNotifications.includes(notificationId);
   }
 
-  showDesktopNotification(notifications, type = 'new') {
+  async loadDesktopMappings() {
+    if (!this.activeProfile || !this.profileState) return [];
+    const mappings = await this.profileState.read(this.activeProfile.profileId, 'desktopMappings', []);
+    const now = Date.now();
+    const retained = (Array.isArray(mappings) ? mappings : [])
+      .filter(mapping => mapping?.expiresAt > now && mapping.profileId === this.activeProfile.profileId)
+      .slice(-MAX_DESKTOP_MAPPINGS);
+    if (retained.length !== mappings.length) await this.profileState.write(this.activeProfile.profileId, 'desktopMappings', retained);
+    return retained;
+  }
+
+  async createDesktopMapping(notification, mappingType) {
+    if (!this.activeProfile || !this.profileState) return null;
+    const mappings = await this.loadDesktopMappings();
+    const token = this.profileState.createBindingId().replace(/-/g, '');
+    const desktopId = `${mappingType === 'single' ? 'issue' : 'batch'}:${token}`;
+    const mapping = {
+      desktopId,
+      profileId: this.activeProfile.profileId,
+      recordId: mappingType === 'single' ? notification.id : null,
+      issueUrl: mappingType === 'single' ? notification.url : null,
+      type: mappingType,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + DESKTOP_MAPPING_TTL_MS
+    };
+    await this.profileState.write(this.activeProfile.profileId, 'desktopMappings', [...mappings, mapping].slice(-MAX_DESKTOP_MAPPINGS));
+    return mapping;
+  }
+
+  async removeDesktopMapping(desktopId) {
+    if (!this.activeProfile || !this.profileState) return;
+    const mappings = await this.loadDesktopMappings();
+    await this.profileState.write(this.activeProfile.profileId, 'desktopMappings', mappings.filter(mapping => mapping.desktopId !== desktopId));
+  }
+
+  async resolveDesktopMapping(desktopId) {
+    if (!this.activeProfile) await this.restoreActiveProfile();
+    if (!this.activeProfile || !this.profileState) return null;
+    const mapping = (await this.loadDesktopMappings()).find(item => item.desktopId === desktopId);
+    if (!mapping || mapping.profileId !== this.activeProfile.profileId || mapping.expiresAt <= Date.now()) return null;
+    if (mapping.type === 'single') {
+      const record = (await this.loadNotificationHistory()).find(item => item.id === mapping.recordId);
+      if (!record || record.profileId !== mapping.profileId || record.url !== mapping.issueUrl) return null;
+      try {
+        const base = new URL(this.settings.redmineUrl);
+        const target = new URL(mapping.issueUrl);
+        const normalizedBasePath = base.pathname.replace(/\/$/, '');
+        if (base.origin !== target.origin || !target.pathname.startsWith(`${normalizedBasePath}/issues/`)) return null;
+      } catch {
+        return null;
+      }
+    }
+    return mapping;
+  }
+
+  async handleDesktopClick(desktopId) {
+    const mapping = await this.resolveDesktopMapping(desktopId);
+    if (!mapping) {
+      if (!desktopId.startsWith('issue:')) chrome.action.openPopup();
+      return false;
+    }
+    if (mapping.type === 'batch') chrome.action.openPopup();
+    else await chrome.tabs.create({ url: mapping.issueUrl });
+    return true;
+  }
+
+  async handleDesktopButton(desktopId, buttonIndex) {
+    const mapping = await this.resolveDesktopMapping(desktopId);
+    if (!mapping || mapping.type !== 'single') return false;
+    if (buttonIndex === 0) {
+      await chrome.tabs.create({ url: mapping.issueUrl });
+      return true;
+    }
+    if (buttonIndex === 1) {
+      try {
+        await this.markAsRead(mapping.recordId, mapping.profileId);
+        await new Promise(resolve => chrome.notifications.clear(desktopId, () => resolve()));
+        await this.removeDesktopMapping(desktopId);
+        return true;
+      } catch (_error) {
+        const health = await this.profileState.read(this.activeProfile.profileId, 'syncHealth', {});
+        await this.profileState.write(this.activeProfile.profileId, 'syncHealth', {
+          ...health, lastErrorCode: 'desktopMarkReadFailed', lastErrorAt: Date.now()
+        });
+        return false;
+      }
+    }
+    return false;
+  }
+
+  async showDesktopNotification(notifications, type = 'new') {
     console.log(`Attempting to show ${type} notification for ${notifications.length} items`);
     
     if (notifications.length === 1) {
       const notification = notifications[0];
       const isUpdate = type === 'updated';
+      const mapping = await this.createDesktopMapping(notification, 'single');
       
       const notificationOptions = {
         type: 'basic',
         iconUrl: 'icons/icon48.png',
         title: isUpdate ? this.translate('issueUpdatedTitle') : this.translate('newIssueTitle'),
         message: notification.title,
-        contextMessage: `${notification.project}${isUpdate ? ' (' + this.translate('updated') + ')' : ''}`
+        contextMessage: `${notification.project}${isUpdate ? ' (' + this.translate('updated') + ')' : ''}`,
+        silent: !this.settings.enableSound,
+        buttons: [
+          { title: this.translate('openIssue') },
+          { title: this.translate('markAsRead') }
+        ]
       };
 
-      chrome.notifications.create(notificationOptions, (notificationId) => {
+      const desktopId = mapping?.desktopId || `legacy:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+      chrome.notifications.create(desktopId, notificationOptions, (notificationId) => {
         if (chrome.runtime.lastError) {
           console.error('Failed to create notification:', chrome.runtime.lastError);
         } else {
@@ -2161,17 +2508,20 @@ class NotificationManager {
     } else {
       const isUpdate = type === 'updated';
       const count = notifications.length;
+      const mapping = await this.createDesktopMapping(notifications[0], 'batch');
       const notificationOptions = {
         type: 'basic',
         iconUrl: 'icons/icon48.png',
         title: isUpdate ? this.translate('issuesUpdatedTitle') : this.translate('newIssuesTitle'),
         message: this.translate(isUpdate ? 'multipleIssuesUpdatedMessage' : 'multipleNewIssuesMessage', [count]),
-        contextMessage: this.translate('clickToViewAll')
+        contextMessage: this.translate('clickToViewAll'),
+        silent: !this.settings.enableSound
       };
       
       // ...已移除除錯用 log...
       
-      chrome.notifications.create(notificationOptions, (notificationId) => {
+      const desktopId = mapping?.desktopId || `legacy:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+      chrome.notifications.create(desktopId, notificationOptions, (notificationId) => {
         if (chrome.runtime.lastError) {
           console.error('Failed to create batch notification:', chrome.runtime.lastError);
         } else {
@@ -2187,21 +2537,23 @@ class NotificationManager {
     chrome.action.setBadgeBackgroundColor({ color: '#667eea' });
   }
 
-  async markAsRead(notificationId) {
+  async markAsRead(notificationId, profileId) {
+    await this.requireProfile(profileId);
     const notification = this.notifications.get(notificationId);
+    if (notification && notification.profileId !== this.activeProfile?.profileId) throw new Error('profileMismatch');
     if (notification) {
       notification.read = true;
     }
 
-    const result = this.normalizeStorageResult(
-      await chrome.storage.sync.get(['readNotifications'])
-    );
-    const readNotifications = result.readNotifications || [];
+    const readNotifications = this.profileState
+      ? await this.profileState.read(this.activeProfile.profileId, 'readIds', [])
+      : this.normalizeStorageResult(await chrome.storage.sync.get(['readNotifications'])).readNotifications || [];
     
     if (!readNotifications.includes(notificationId)) {
       readNotifications.push(notificationId);
       this.trimReadNotifications(readNotifications);
-      await chrome.storage.sync.set({ readNotifications });
+      if (this.profileState) await this.profileState.write(this.activeProfile.profileId, 'readIds', readNotifications);
+      else await chrome.storage.sync.set({ readNotifications });
     }
 
     const history = await this.loadNotificationHistory();
@@ -2216,12 +2568,12 @@ class NotificationManager {
   }
 
   async markAllAsRead() {
+    await this.requireProfile();
     const history = await this.loadNotificationHistory();
     const unreadNotifications = Array.from(this.notifications.values()).filter(n => !n.read);
-    const result = this.normalizeStorageResult(
-      await chrome.storage.sync.get(['readNotifications'])
-    );
-    const readNotifications = result.readNotifications || [];
+    const readNotifications = this.profileState
+      ? await this.profileState.read(this.activeProfile.profileId, 'readIds', [])
+      : this.normalizeStorageResult(await chrome.storage.sync.get(['readNotifications'])).readNotifications || [];
 
     for (const notification of unreadNotifications) {
       notification.read = true;
@@ -2240,19 +2592,26 @@ class NotificationManager {
       return { ...record, read: true };
     });
 
-    await chrome.storage.sync.set({ readNotifications });
+    if (this.profileState) await this.profileState.write(this.activeProfile.profileId, 'readIds', readNotifications);
+    else await chrome.storage.sync.set({ readNotifications });
     await this.saveNotificationHistory(updatedHistory);
     this.updateBadge(0);
   }
 
   async clearNotificationHistory() {
+    await this.requireProfile();
     this.notifications.clear();
-    await chrome.storage.sync.set({ readNotifications: [] });
-    await chrome.storage.local.set({
-      [this.notificationHistoryStorageKey]: [],
-      seenNotifications: [],
-      issueStates: {}
-    });
+    if (this.profileState) {
+      await Promise.all([
+        this.profileState.write(this.activeProfile.profileId, 'readIds', []),
+        this.profileState.write(this.activeProfile.profileId, 'history', []),
+        this.profileState.write(this.activeProfile.profileId, 'seenIds', []),
+        this.profileState.write(this.activeProfile.profileId, 'issueStates', {})
+      ]);
+    } else {
+      await chrome.storage.sync.set({ readNotifications: [] });
+      await chrome.storage.local.set({ [this.notificationHistoryStorageKey]: [], seenNotifications: [], issueStates: {} });
+    }
     this.updateBadge(0);
 
     chrome.notifications.getAll((notifications) => {
@@ -2269,14 +2628,13 @@ class NotificationManager {
   }
 
   async forceRefreshNotifications() {
-    // Clear seen notifications to force showing notifications again if needed
-    await chrome.storage.local.set({ seenNotifications: [] });
-    
-    // Force check notifications
-    await this.checkNotifications();
+    return this.requestSync('forceRefresh', { force: true });
   }
 
   async getNotifications() {
+    await this.ensureSettingsLoaded();
+    if (!this.activeProfile) await this.restoreActiveProfile();
+    if (!this.activeProfile && this.settings.redmineUrl && this.settings.apiKey) await this.resolveActiveProfile();
     const history = await this.loadNotificationHistory();
     if (history.length > 0) {
       return history;
@@ -2284,69 +2642,60 @@ class NotificationManager {
 
     return Array.from(this.notifications.values()).sort((a, b) => b.updatedOn - a.updatedOn);
   }
+
+  async getCachedNotifications() {
+    await this.ensureSettingsLoaded();
+    if (!this.activeProfile) await this.restoreActiveProfile();
+    if (!this.activeProfile) return { notifications: [], syncHealth: null };
+    const [notifications, syncHealth] = await Promise.all([
+      this.loadNotificationHistory(),
+      this.profileState.read(this.activeProfile.profileId, 'syncHealth', null)
+    ]);
+    return { notifications, syncHealth };
+  }
 }
 
 // Background script logic
 const notificationManager = new NotificationManager();
 const ALARM_NAME = 'redmine-notification-check';
 
-function startPeriodicCheck() {
-  stopPeriodicCheck();
-  
-  notificationManager.loadSettings({ notifyPermissionRecovery: true }).then(() => {
-    const intervalMinutes = notificationManager.settings.checkInterval || 15;
-    console.log(`Starting periodic check with interval: ${intervalMinutes} minutes`);
-    console.log('Current settings:', {
-      redmineUrl: notificationManager.settings.redmineUrl ? '[CONFIGURED]' : '[NOT_CONFIGURED]',
-      apiKey: notificationManager.settings.apiKey ? '[CONFIGURED]' : '[NOT_CONFIGURED]',
-      checkInterval: notificationManager.settings.checkInterval,
-      enableNotifications: notificationManager.settings.enableNotifications,
-      enableSound: notificationManager.settings.enableSound,
-      maxNotifications: notificationManager.settings.maxNotifications,
-      onlyMyProjects: notificationManager.settings.onlyMyProjects,
-      includeWatchedIssues: notificationManager.settings.includeWatchedIssues
-    });
-    
-    // Create alarm for periodic checks
-    chrome.alarms.create(ALARM_NAME, {
-      delayInMinutes: 0, // Start immediately
-      periodInMinutes: intervalMinutes
-    });
-    
-    console.log(`Alarm created: ${ALARM_NAME} with ${intervalMinutes} minute interval`);
-    
-    // Check immediately
-    console.log('Running initial notification check');
-    notificationManager.checkNotifications();
-  }).catch(error => {
-    console.error('Failed to load settings:', error);
-  });
-}
+async function ensurePeriodicAlarm() {
+  await notificationManager.loadSettings({ notifyPermissionRecovery: true });
+  const intervalMinutes = notificationManager.settings.checkInterval || 15;
+  const currentAlarm = await new Promise(resolve => chrome.alarms.get(ALARM_NAME, resolve));
+  if (currentAlarm && Number(currentAlarm.periodInMinutes) === Number(intervalMinutes)) {
+    return { changed: false, alarm: currentAlarm };
+  }
 
-function stopPeriodicCheck() {
-  chrome.alarms.clear(ALARM_NAME, (wasCleared) => {
-    if (wasCleared) {
-      console.log(`Alarm ${ALARM_NAME} cleared`);
-    }
-  });
+  if (currentAlarm) {
+    await new Promise(resolve => chrome.alarms.clear(ALARM_NAME, () => resolve()));
+  }
+  chrome.alarms.create(ALARM_NAME, { periodInMinutes: intervalMinutes });
+  return { changed: true, periodInMinutes: intervalMinutes };
 }
 
 // Extension event listeners
 chrome.runtime.onInstalled.addListener(() => {
   console.log('MewMewNotification extension installed');
-  startPeriodicCheck();
+  ensurePeriodicAlarm()
+    .then(() => notificationManager.requestSync('installed'))
+    .catch(error => console.error('Install synchronization failed:', error));
 });
 
 chrome.runtime.onStartup.addListener(() => {
   console.log('MewMewNotification extension started');
-  startPeriodicCheck();
+  ensurePeriodicAlarm()
+    .then(() => notificationManager.requestSync('startup'))
+    .catch(error => console.error('Startup synchronization failed:', error));
 });
 
 // Alarm listener for periodic checks
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
     console.log('Alarm triggered: periodic notification check');
-    notificationManager.checkNotifications();
+    notificationManager.requestSync('alarm');
+  } else if (alarm.name === RETRY_ALARM_NAME) {
+    notificationManager.requestSync('retryAlarm');
   }
 });
 
@@ -2372,10 +2721,11 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     ].includes(key))) {
       console.log('Settings changed, reloading...');
       notificationManager.loadSettings().then(() => {
+        if (changes.redmineUrl) notificationManager.clearRetryMetadata();
         // Restart periodic check if check interval changed
         if (changes.checkInterval) {
           console.log('Check interval changed, restarting periodic check');
-          startPeriodicCheck();
+          ensurePeriodicAlarm();
         }
       });
     }
@@ -2389,7 +2739,17 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 
   if (namespace === 'local' && changes.apiKey) {
     console.log('Local credential change detected, reloading settings...');
-    notificationManager.loadSettings();
+    const oldKey = changes.apiKey.oldValue;
+    const newKey = changes.apiKey.newValue;
+    const rotateBinding = notificationManager.profileState && oldKey !== newKey
+      ? notificationManager.profileState.rotateCredentialBinding(newKey)
+      : Promise.resolve();
+    rotateBinding.then(() => {
+      notificationManager.activeProfile = null;
+      return notificationManager.clearRetryMetadata();
+    }).then(() => {
+      return notificationManager.loadSettings();
+    }).catch(error => console.error('Failed to rotate credential binding:', error));
   }
 });
 
@@ -2428,10 +2788,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return handleAsyncResponse(async () => ({
         notifications: await notificationManager.getNotifications()
       }));
+
+    case 'getCachedNotifications':
+      return handleAsyncResponse(() => notificationManager.getCachedNotifications());
       
     case 'markAsRead':
       return handleAsyncResponse(async () => {
-        await notificationManager.markAsRead(request.notificationId);
+        await notificationManager.markAsRead(request.notificationId, request.profileId);
         return { success: true };
       });
       
@@ -2452,14 +2815,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       
     case 'refreshNotifications':
       return handleAsyncResponse(async () => {
-        await notificationManager.checkNotifications();
-        return { success: true, notifications: await notificationManager.getNotifications() };
+        const syncResult = await notificationManager.requestSync('popup');
+        return { ...syncResult, notifications: await notificationManager.getNotifications() };
       });
       
     case 'forceRefreshNotifications':
       return handleAsyncResponse(async () => {
-        await notificationManager.forceRefreshNotifications();
-        return { success: true, notifications: await notificationManager.getNotifications() };
+        const syncResult = await notificationManager.forceRefreshNotifications();
+        return { ...syncResult, notifications: await notificationManager.getNotifications() };
       });
       
     case 'clearNotificationHistory':
@@ -2470,13 +2833,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'getIssueActionContext':
       return handleAsyncResponse(
-        () => notificationManager.getIssueActionContext(request.issueId),
+        () => notificationManager.getIssueActionContext(request.issueId, request.profileId, request.notificationId),
         error => notificationManager.resolveIssueActionError(error)
       );
 
     case 'applyIssueChanges':
       return handleAsyncResponse(
-        () => notificationManager.applyIssueChanges(request.issueId, request.changes),
+        () => notificationManager.applyIssueChanges(request.issueId, request.changes, request.profileId, request.notificationId),
         error => notificationManager.resolveIssueActionError(error)
       );
       
@@ -2530,8 +2893,19 @@ chrome.notifications.onClicked.addListener((notificationId) => {
     return;
   }
 
-  chrome.action.openPopup();
+  notificationManager.handleDesktopClick(notificationId)
+    .catch(error => console.error('Desktop notification click failed:', error));
 });
 
-// Start the periodic check
-startPeriodicCheck();
+chrome.notifications.onButtonClicked?.addListener((notificationId, buttonIndex) => {
+  notificationManager.handleDesktopButton(notificationId, buttonIndex)
+    .catch(error => console.error('Desktop notification button failed:', error));
+});
+
+chrome.notifications.onClosed?.addListener(notificationId => {
+  notificationManager.removeDesktopMapping(notificationId)
+    .catch(error => console.error('Desktop notification cleanup failed:', error));
+});
+
+// Module load only repairs the periodic alarm; it never starts synchronization.
+ensurePeriodicAlarm().catch(error => console.error('Failed to ensure periodic alarm:', error));

@@ -726,5 +726,15 @@
   "changeField_assignee": {
     "message": "Assignee",
     "description": "Change digest field label for assignee"
-  }
+  },
+  "syncStatusCached": { "message": "Showing saved notifications" },
+  "syncStatusSyncing": { "message": "Syncing notifications…" },
+  "syncStatusSuccess": { "message": "Notifications are up to date" },
+  "syncStatusStale": { "message": "Showing saved notifications; sync is unavailable" },
+  "syncStatusRetry": { "message": "Sync retry is scheduled" },
+  "syncStatusError": { "message": "Notification sync failed" },
+  "actionFailedRetry": { "message": "The action failed. Please retry." },
+  "openIssue": { "message": "Open issue" },
+  "soundPlatformLimitation": { "message": "Notification sound depends on browser and operating-system settings" },
+  "syncStatusLastSuccess": { "message": "Last successful sync: $1" }
 }

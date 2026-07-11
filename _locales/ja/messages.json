@@ -714,5 +714,18 @@
   "changeField_assignee": {
     "message": "担当者",
     "description": "Change digest field label for assignee"
-  }
+  },
+  "syncStatusCached": { "message": "保存済みの通知を表示しています" },
+  "syncStatusSyncing": { "message": "通知を同期しています…" },
+  "syncStatusSuccess": { "message": "通知は最新です" },
+  "syncStatusStale": { "message": "同期を利用できないため、保存済みの通知を表示しています" },
+  "syncStatusRetry": { "message": "同期の再試行を予定しました" },
+  "syncStatusError": { "message": "通知の同期に失敗しました" },
+  "actionFailedRetry": { "message": "操作に失敗しました。再試行してください。" },
+  "openIssue": { "message": "チケットを開く" },
+  "soundPlatformLimitation": { "message": "通知音はブラウザーと OS の設定に依存します" },
+  "connectionRetrying": { "message": "接続に失敗したため再試行しています" },
+  "rateLimitWarning": { "message": "要求が多すぎるため後で再試行します" },
+  "syncStatusLastSuccess": { "message": "前回の同期成功：$1" },
+  "by": { "message": "作成者" }
 }

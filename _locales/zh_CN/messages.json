@@ -714,5 +714,18 @@
   "changeField_assignee": {
     "message": "指派人",
     "description": "Change digest field label for assignee"
-  }
+  },
+  "syncStatusCached": { "message": "正在显示已保存的通知" },
+  "syncStatusSyncing": { "message": "正在同步通知…" },
+  "syncStatusSuccess": { "message": "通知已是最新状态" },
+  "syncStatusStale": { "message": "同步暂时不可用，正在显示已保存的通知" },
+  "syncStatusRetry": { "message": "已安排同步重试" },
+  "syncStatusError": { "message": "通知同步失败" },
+  "actionFailedRetry": { "message": "操作失败，请重试。" },
+  "openIssue": { "message": "打开议题" },
+  "soundPlatformLimitation": { "message": "通知声音取决于浏览器和操作系统设置" },
+  "connectionRetrying": { "message": "连接失败，正在重试" },
+  "rateLimitWarning": { "message": "请求过于频繁，稍后将重试" },
+  "syncStatusLastSuccess": { "message": "上次成功同步：$1" },
+  "by": { "message": "由" }
 }

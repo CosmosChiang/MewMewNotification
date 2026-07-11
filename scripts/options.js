@@ -40,6 +40,7 @@ class OptionsManager {
         throw new Error(`HTTP ${response.status}`);
       }
       this.translations = await response.json();
+      document.documentElement.lang = this.currentLanguage.replace('_', '-');
       return this.translations;
     } catch (error) {
       console.error('Failed to load language:', error);
@@ -927,6 +928,7 @@ class OptionsManager {
       button.addEventListener('click', (e) => {
         this.switchTab(e.target.dataset.tab);
       });
+      button.addEventListener('keydown', event => this.handleTabKeydown(event));
     });
 
     // Test connection button
@@ -972,7 +974,7 @@ class OptionsManager {
     });
 
     // Language change - just update UI, don't auto-save
-    document.getElementById('languageSelect').addEventListener('change', (e) => {
+    document.getElementById('languageSelect').addEventListener('change', (_event) => {
       // Just update the preview, don't save automatically
       // Users need to click save button to persist changes
     });
@@ -987,18 +989,38 @@ class OptionsManager {
     });
   }
 
+  handleTabKeydown(event) {
+    const tabs = Array.from(document.querySelectorAll('.tab-button'));
+    const index = tabs.indexOf(event.currentTarget);
+    if (index < 0) return;
+    let next;
+    if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    tabs[next].focus();
+    this.switchTab(tabs[next].dataset.tab);
+  }
+
   switchTab(tabId) {
     // Update tab buttons
     document.querySelectorAll('.tab-button').forEach(button => {
       button.classList.remove('active');
+      const selected = button.dataset.tab === tabId;
+      button.setAttribute('aria-selected', selected ? 'true' : 'false');
+      button.setAttribute('tabindex', selected ? '0' : '-1');
     });
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
 
     // Update tab panels
     document.querySelectorAll('.tab-panel').forEach(panel => {
       panel.classList.remove('active');
+      panel.hidden = true;
     });
     document.getElementById(tabId).classList.add('active');
+    document.getElementById(tabId).hidden = false;
   }
 
   populateForm() {

@@ -10,17 +10,14 @@ class PopupManager {
     this.isRendering = false;
     this.expandedNotificationId = undefined;
     this.issueActionStates = new Map();
-    this.virtualScrollConfig = {
-      itemHeight: 80,
-      bufferSize: 5,
-      visibleItems: 10
-    };
+    this.syncHealth = null;
     this.init();
   }
 
   async init() {
     await this.loadLanguage();
     this.setupEventListeners();
+    await this.loadCachedNotifications();
     this.loadNotifications();
   }
 
@@ -42,6 +39,7 @@ class PopupManager {
         throw new Error(`HTTP ${response.status}`);
       }
       this.translations = await response.json();
+      document.documentElement.lang = this.currentLanguage.replace('_', '-');
       
       this.updateUI();
       return this.translations;
@@ -88,16 +86,19 @@ class PopupManager {
     const markAllBtn = document.getElementById('markAllReadBtn');
     if (markAllBtn) {
       markAllBtn.title = this.translate('markAllRead');
+      markAllBtn.setAttribute('aria-label', this.translate('markAllRead'));
     }
 
     const settingsBtn = document.getElementById('settingsBtn');
     if (settingsBtn) {
       settingsBtn.title = this.translate('settings');
+      settingsBtn.setAttribute('aria-label', this.translate('settings'));
     }
 
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
       refreshBtn.title = this.translate('refreshNotifications');
+      refreshBtn.setAttribute('aria-label', this.translate('refreshNotifications'));
     }
 
     const retryBtn = document.getElementById('retryBtn');
@@ -231,6 +232,7 @@ class PopupManager {
       button.addEventListener('click', () => {
         this.setInboxView(button.dataset.view || 'unread');
       });
+      button.addEventListener('keydown', event => this.handleTabKeydown(event));
     });
 
     const notificationSearch = document.getElementById('notificationSearch');
@@ -260,6 +262,66 @@ class PopupManager {
         this.loadLanguage();
       }
     });
+  }
+
+  handleTabKeydown(event) {
+    const tabs = Array.from(document.querySelectorAll('.inbox-tab'));
+    const currentIndex = tabs.indexOf(event.currentTarget);
+    if (currentIndex < 0) return;
+    let nextIndex;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    tabs[nextIndex].focus();
+    this.setInboxView(tabs[nextIndex].dataset.view || 'unread');
+  }
+
+  setHealthStatus(key, { assertive = false } = {}) {
+    const status = document.getElementById('syncHealthStatus');
+    if (!status) return;
+    status.setAttribute?.('aria-live', assertive ? 'assertive' : 'polite');
+    status.textContent = this.translate(key);
+  }
+
+  applySyncResult(result) {
+    this.syncHealth = result;
+    if (result.status === 'success') {
+      this.setHealthStatus('syncStatusSuccess');
+      if (result.lastSuccessAt) {
+        document.getElementById('syncHealthStatus').textContent = this.translate('syncStatusLastSuccess', [
+          new Date(result.lastSuccessAt).toLocaleString(this.currentLanguage.replace('_', '-'))
+        ]);
+      }
+    }
+    else if (result.status === 'retryScheduled') this.setHealthStatus('syncStatusRetry');
+    else if (result.stale || result.status === 'stale') this.setHealthStatus('syncStatusStale', { assertive: true });
+    else this.setHealthStatus('syncStatusError', { assertive: true });
+    if (result.errorCode && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(result.errorCode)) {
+      const status = document.getElementById('syncHealthStatus');
+      status.textContent = `${status.textContent} (${result.errorCode})`;
+    }
+  }
+
+  announceActionFailure() {
+    this.setHealthStatus('actionFailedRetry', { assertive: true });
+  }
+
+  async loadCachedNotifications() {
+    try {
+      const response = await this.sendRuntimeMessage({ action: 'getCachedNotifications' });
+      this.notifications = (response.notifications || []).map(notification => this.normalizeNotification(notification));
+      this.syncHealth = response.syncHealth || null;
+      this.renderNotifications();
+      this.setHealthStatus(this.syncHealth?.lastErrorCode ? 'syncStatusStale' : 'syncStatusCached', {
+        assertive: Boolean(this.syncHealth?.lastErrorCode)
+      });
+    } catch {
+      this.notifications = [];
+      this.renderNotifications();
+    }
   }
 
   handleNotificationClick(event) {
@@ -302,22 +364,22 @@ class PopupManager {
   }
 
   async loadNotifications() {
-    this.showLoading();
+    if (this.notifications.length === 0) this.showLoading();
+    this.setHealthStatus('syncStatusSyncing');
     
     try {
       const response = await this.sendRuntimeMessage({ action: 'refreshNotifications' });
       
-      if (response.success) {
+      if (Array.isArray(response.notifications)) {
         this.notifications = response.notifications
           .map(notification => this.normalizeNotification(notification));
         this.pruneIssueActionState();
         this.throttledRender();
-      } else {
-        this.showError(response.error);
       }
+      this.applySyncResult(response);
     } catch (error) {
       console.error('Failed to load notifications:', error);
-      this.showError(this.resolveRuntimeError(error, 'loadError'));
+      this.setHealthStatus('syncStatusStale', { assertive: true });
     }
   }
 
@@ -347,6 +409,8 @@ class PopupManager {
       const isActive = button.dataset.view === this.activeInboxView;
       button.classList.toggle('active', isActive);
       button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      button.setAttribute('tabindex', isActive ? '0' : '-1');
+      if (isActive) document.getElementById('notificationsPanel')?.setAttribute('aria-labelledby', button.id);
     });
   }
 
@@ -459,11 +523,7 @@ class PopupManager {
     emptyState.style.display = 'none';
     notificationsList.style.display = 'block';
     
-    if (this.visibleNotifications.length > 20 && !this.expandedNotificationId) {
-      this.renderVirtualScrollNotifications(notificationsList);
-    } else {
-      this.renderAllNotifications(notificationsList);
-    }
+    this.renderAllNotifications(notificationsList);
 
     const hasUnread = this.notifications.some(notification => !notification.read);
     const markAllBtn = document.getElementById('markAllReadBtn');
@@ -480,63 +540,6 @@ class PopupManager {
     
     container.replaceChildren();
     container.appendChild(fragment);
-  }
-
-  renderVirtualScrollNotifications(container) {
-    container.replaceChildren();
-    container.style.height = '400px';
-    container.style.overflowY = 'auto';
-    
-    const virtualContainer = document.createElement('div');
-    virtualContainer.style.height = `${this.visibleNotifications.length * this.virtualScrollConfig.itemHeight}px`;
-    virtualContainer.style.position = 'relative';
-    
-    const viewportContainer = document.createElement('div');
-    viewportContainer.style.position = 'absolute';
-    viewportContainer.style.top = '0';
-    viewportContainer.style.left = '0';
-    viewportContainer.style.right = '0';
-    
-    virtualContainer.appendChild(viewportContainer);
-    container.appendChild(virtualContainer);
-    
-    this.updateVirtualScrollView(container, viewportContainer, 0);
-    
-    let scrollTimeout;
-    container.addEventListener('scroll', () => {
-      if (scrollTimeout) clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
-        const scrollTop = container.scrollTop;
-        this.updateVirtualScrollView(container, viewportContainer, scrollTop);
-      }, 16);
-    });
-  }
-
-  updateVirtualScrollView(container, viewportContainer, scrollTop) {
-    const { itemHeight, bufferSize } = this.virtualScrollConfig;
-    const containerHeight = container.clientHeight;
-    
-    const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - bufferSize);
-    const endIndex = Math.min(
-      this.visibleNotifications.length - 1,
-      Math.floor((scrollTop + containerHeight) / itemHeight) + bufferSize
-    );
-    
-    const fragment = document.createDocumentFragment();
-    
-    for (let index = startIndex; index <= endIndex; index += 1) {
-      const notification = this.visibleNotifications[index];
-      const element = this.createNotificationElement(notification);
-      element.style.position = 'absolute';
-      element.style.top = `${index * itemHeight}px`;
-      element.style.left = '0';
-      element.style.right = '0';
-      element.style.height = `${itemHeight}px`;
-      fragment.appendChild(element);
-    }
-    
-    viewportContainer.replaceChildren();
-    viewportContainer.appendChild(fragment);
   }
 
   createNotificationElement(notification) {
@@ -558,6 +561,15 @@ class PopupManager {
     const actionsDiv = element.querySelector('.notification-actions');
     const advancedPanel = element.querySelector('.advanced-actions-panel');
     contentDiv.dataset.action = 'open-notification';
+    contentDiv.tabIndex = 0;
+    contentDiv.setAttribute('role', 'link');
+    contentDiv.setAttribute('aria-label', notification.title || this.translate('openIssue'));
+    contentDiv.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this.openNotification(notification);
+      }
+    });
     
     titleDiv.replaceChildren();
     
@@ -619,6 +631,8 @@ class PopupManager {
       : this.translate('moreActions');
     moreActionsButton.textContent = '⋯';
     moreActionsButton.dataset.action = 'more-actions';
+    moreActionsButton.setAttribute('aria-label', moreActionsButton.title);
+    moreActionsButton.setAttribute('aria-expanded', this.expandedNotificationId === notification.id ? 'true' : 'false');
     actionsDiv.appendChild(moreActionsButton);
     
     if (!notification.read) {
@@ -627,6 +641,7 @@ class PopupManager {
       markReadBtn.title = this.translate('markAsRead');
       markReadBtn.dataset.notificationId = this.sanitizeAttribute(notification.id);
       markReadBtn.dataset.action = 'mark-read';
+      markReadBtn.setAttribute('aria-label', this.translate('markAsRead'));
       
       const buttonIcon = document.createElement('span');
       buttonIcon.textContent = '✓';
@@ -761,7 +776,9 @@ class PopupManager {
     try {
       const response = await this.sendRuntimeMessage({
         action: 'getIssueActionContext',
-        issueId: notification.issueId
+        issueId: notification.issueId,
+        notificationId: notification.id,
+        profileId: notification.profileId
       });
 
       if (!response?.success) {
@@ -1177,6 +1194,8 @@ class PopupManager {
       {
         action: 'applyIssueChanges',
         issueId: notification.issueId,
+        notificationId: notification.id,
+        profileId: notification.profileId,
         changes
       },
       'issueChangesSuccess'
@@ -1226,7 +1245,7 @@ class PopupManager {
       if (urlObj.protocol === 'http:' || urlObj.protocol === 'https:') {
         return url;
       }
-    } catch (error) {
+    } catch (_error) {
       console.warn('Invalid URL provided:', url);
     }
     return '#';
@@ -1244,6 +1263,7 @@ class PopupManager {
       window.close();
     } catch (error) {
       console.error('Failed to open notification URL:', error);
+      this.announceActionFailure();
     }
   }
 
@@ -1251,7 +1271,8 @@ class PopupManager {
     try {
       const response = await this.sendRuntimeMessage({
         action: 'markAsRead',
-        notificationId
+        notificationId,
+        profileId: this.findNotification(notificationId)?.profileId
       });
       
       if (response.success) {
@@ -1263,9 +1284,12 @@ class PopupManager {
           this.expandedNotificationId = undefined;
         }
         this.renderNotifications();
+      } else {
+        this.announceActionFailure();
       }
     } catch (error) {
       console.error('Failed to mark notification as read:', error);
+      this.announceActionFailure();
     }
   }
 
@@ -1281,42 +1305,39 @@ class PopupManager {
         this.issueActionStates.clear();
         this.expandedNotificationId = undefined;
         this.renderNotifications();
+      } else {
+        this.announceActionFailure();
       }
     } catch (error) {
       console.error('Failed to mark all notifications as read:', error);
+      this.announceActionFailure();
     }
   }
 
   async refreshNotifications() {
     const refreshBtn = document.getElementById('refreshBtn');
-    const originalTransform = refreshBtn.style.transform;
-    refreshBtn.style.transform = 'rotate(360deg)';
-    refreshBtn.style.transition = 'transform 0.3s ease-in-out';
     refreshBtn.disabled = true;
-    
-    this.showLoading();
-    
-    setTimeout(() => {
-      refreshBtn.style.transform = originalTransform;
-      refreshBtn.disabled = false;
-    }, 300);
+    refreshBtn.classList?.add('syncing');
+    this.setHealthStatus('syncStatusSyncing');
 
     try {
       const response = await this.sendRuntimeMessage({ 
         action: 'forceRefreshNotifications' 
       });
       
-      if (response.success) {
+      if (Array.isArray(response.notifications)) {
         this.notifications = response.notifications
           .map(notification => this.normalizeNotification(notification));
         this.pruneIssueActionState();
         this.renderNotifications();
-      } else {
-        this.loadNotifications();
       }
+      this.applySyncResult(response);
     } catch (error) {
       console.error('Failed to refresh notifications:', error);
-      this.loadNotifications();
+      this.setHealthStatus('syncStatusStale', { assertive: true });
+    } finally {
+      refreshBtn.disabled = false;
+      refreshBtn.classList?.remove('syncing');
     }
   }
 
