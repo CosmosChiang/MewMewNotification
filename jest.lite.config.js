@@ -3,6 +3,7 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/test-setup.js'],
 
   testMatch: ['<rootDir>/scripts/**/*.test.js'],
+  testPathIgnorePatterns: ['<rootDir>/scripts/fake-redmine.integration.test.js'],
   collectCoverage: false,
   maxWorkers: 1,
   testTimeout: 5000,

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "files": [
+    "LICENSE",
+    "background.js",
+    "manifest.json",
+    "options.html",
+    "popup.html",
+    "scripts/options.js",
+    "scripts/popup.js",
+    "scripts/shared/config-manager.js",
+    "scripts/shared/i18n.js",
+    "scripts/shared/profile-state-manager.js"
+  ],
+  "directories": [
+    "_locales",
+    "icons",
+    "styles"
+  ]
+}

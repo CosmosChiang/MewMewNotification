@@ -3,8 +3,7 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main]
-    tags:
-      - "v*"
+    tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -17,150 +16,102 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        node-version: [18.x, 20.x]
-
+        node-version: [22.x, 24.x]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v6
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: ${{ matrix.node-version }}
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run dependency audit
-        if: matrix.node-version == '20.x'
-        run: npm run audit:high
-
-      - name: Run tests with coverage
-        run: npm run test:ci
-
-      - name: Upload coverage to Codecov
-        if: matrix.node-version == '20.x'
-        uses: codecov/codecov-action@v6
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run locale:check
+      - run: npm run workflow:check
+      - run: npm run test:ci -- --detectOpenHandles --silent
+      - run: npm run audit:high
+      - run: npm run openspec:check
+      - name: Upload coverage
+        if: matrix.node-version == '24.x'
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
         with:
           files: ./coverage/lcov.info
-          fail_ci_if_error: false
+          fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  build:
+  integration:
     runs-on: ubuntu-latest
-    needs: test
-
+    needs: quality
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: "20.x"
-          cache: "npm"
+          node-version: 24.x
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:integration -- --silent
+      - run: npx playwright install --with-deps chromium
+      - run: npm run package
+      - run: npm run test:smoke
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Validate workflow helper
-        run: node validate-workflow.js
-
-      - name: Run project build hook
-        run: npm run build --if-present
-
-      - name: Validate manifest
-        run: |
-          if [ -f "manifest.json" ]; then
-            echo "Validating manifest.json..."
-            node -e "
-              const manifest = require('./manifest.json');
-              console.log('Manifest version:', manifest.version);
-              console.log('Extension name:', manifest.name);
-              if (!manifest.version || !manifest.name) {
-                process.exit(1);
-              }
-            "
-          fi
-
-      - name: Package extension
-        run: |
-          mkdir -p dist/package/scripts/shared
-          cp manifest.json background.js options.html popup.html LICENSE dist/package/
-          cp scripts/options.js scripts/popup.js dist/package/scripts/
-          cp scripts/shared/config-manager.js scripts/shared/i18n.js dist/package/scripts/shared/
-          cp -r icons dist/package/
-          cp -r styles dist/package/
-          cp -r _locales dist/package/
-          (
-            cd dist/package
-            zip -r ../mewmew-notification-extension.zip .
-          )
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v6
+  package:
+    runs-on: ubuntu-latest
+    needs: [quality, integration]
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run version:check
+      - run: npm run package
+      - run: npm run package:validate
+      - name: Upload package
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: extension-package
-          path: dist/mewmew-notification-extension.zip
+          path: |
+            dist/mewmew-notification-extension.zip
+            dist/mewmew-notification-extension.zip.sha256
           retention-days: 30
+      - name: Attest package provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: dist/mewmew-notification-extension.zip
 
   release:
     runs-on: ubuntu-latest
-    needs: [test, build]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: package
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v7
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: extension-package
-          path: ./dist
-
-      - name: Get version from manifest
-        id: get_version
-        run: |
-          VERSION=$(node -e "console.log(require('./manifest.json').version)")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: dist
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          body: |
-            ## 🚀 自動發布版本 ${{ steps.get_version.outputs.version }}
-
-            ### 變更內容
-            - 自動建構並測試通過
-            - 包含所有最新功能和修復
-            - 單元測試覆蓋率已驗證
-            - 擴充功能封裝產物已建立
-
-            ### 安裝方式
-            1. 下載 `mewmew-notification-extension.zip`
-            2. 解壓縮檔案
-            3. 在 Chrome 瀏覽器中開啟擴充功能管理頁面
-            4. 啟用「開發人員模式」
-            5. 點擊「載入未封裝項目」並選擇解壓縮的資料夾
-
-            ### 測試狀態
-            - ✅ 單元測試: 通過
-            - ✅ 封裝流程: 成功
-            - ✅ GitHub Release: 已建立
-          files: ./dist/mewmew-notification-extension.zip
-          draft: false
-          prerelease: false
+          node-version: 24.x
+      - name: Verify release identity and checksum
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          npm run version:check
+          sha256sum --check dist/mewmew-notification-extension.zip.sha256
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/mewmew-notification-extension.zip dist/mewmew-notification-extension.zip.sha256 --verify-tag --generate-notes
