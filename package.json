@@ -10,7 +10,7 @@
   "dependencies": {},
   "devDependencies": {
     "@fission-ai/openspec": "^1.6.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "eslint": "^10.0.3",
     "globals": "^17.7.0",
     "istanbul-lib-instrument": "^6.0.3",
