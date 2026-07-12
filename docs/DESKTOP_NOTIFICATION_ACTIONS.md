@@ -2,6 +2,8 @@
 
 Single-issue desktop notifications use opaque `issue:<token>` IDs. A bounded local Profile mapping stores only the active profile ID, retained record ID, validated issue URL, notification type, and expiry. Mappings expire after seven days, are capped at 100 entries, and are removed when the system notification closes or the explicit mark-read action succeeds.
 
+The mapping is created before the Chrome notification so click handling is durable as soon as the notification exists. If Chrome rejects creation, the extension removes only that newly-created mapping and retains unrelated mappings.
+
 Primary click on a valid single notification opens its mapped Redmine issue. The two optional platform buttons are Open issue and Mark read. Mark read updates local retained history and badge state idempotently; it does not issue a Redmine mutation. If persistence fails, the mapping remains and sync health records the safe `desktopMarkReadFailed` code.
 
 Batch notifications open the popup inbox. Unknown and legacy IDs may open the inbox but never an unvalidated URL. Expired, malformed, cross-Profile, record-mismatched, or wrong-origin mappings open no issue and change no read state.
@@ -14,3 +16,4 @@ Batch notifications open the popup inbox. Unknown and legacy IDs may open the in
 4. Verify a batch notification opens the popup rather than an arbitrary issue.
 5. Switch credentials before clicking an old notification and verify no issue opens.
 6. Verify platforms that omit buttons retain safe primary-click and popup behavior.
+7. Deny desktop notification creation in a test build and verify no orphan mapping remains.

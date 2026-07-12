@@ -2415,10 +2415,32 @@ class NotificationManager {
     return mapping;
   }
 
-  async removeDesktopMapping(desktopId) {
-    if (!this.activeProfile || !this.profileState) return;
+  async removeDesktopMapping(desktopId, profileId = this.activeProfile?.profileId) {
+    if (!this.activeProfile || !this.profileState || profileId !== this.activeProfile.profileId) return false;
     const mappings = await this.loadDesktopMappings();
-    await this.profileState.write(this.activeProfile.profileId, 'desktopMappings', mappings.filter(mapping => mapping.desktopId !== desktopId));
+    await this.profileState.write(profileId, 'desktopMappings', mappings.filter(mapping => mapping.desktopId !== desktopId));
+    return true;
+  }
+
+  async createDesktopSystemNotification(mapping, notificationOptions) {
+    const desktopId = mapping?.desktopId || `legacy:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+    try {
+      await new Promise((resolve, reject) => {
+        chrome.notifications.create(desktopId, notificationOptions, notificationId => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message || 'desktopNotificationCreateFailed'));
+          } else {
+            resolve(notificationId);
+          }
+        });
+      });
+      console.log('Notification created successfully:', desktopId);
+      return true;
+    } catch (error) {
+      if (mapping) await this.removeDesktopMapping(mapping.desktopId, mapping.profileId);
+      console.error('Failed to create notification:', error);
+      return false;
+    }
   }
 
   async resolveDesktopMapping(desktopId) {
@@ -2497,14 +2519,7 @@ class NotificationManager {
         ]
       };
 
-      const desktopId = mapping?.desktopId || `legacy:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-      chrome.notifications.create(desktopId, notificationOptions, (notificationId) => {
-        if (chrome.runtime.lastError) {
-          console.error('Failed to create notification:', chrome.runtime.lastError);
-        } else {
-          console.log('Notification created successfully:', notificationId);
-        }
-      });
+      await this.createDesktopSystemNotification(mapping, notificationOptions);
     } else {
       const isUpdate = type === 'updated';
       const count = notifications.length;
@@ -2520,14 +2535,7 @@ class NotificationManager {
       
       // ...已移除除錯用 log...
       
-      const desktopId = mapping?.desktopId || `legacy:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-      chrome.notifications.create(desktopId, notificationOptions, (notificationId) => {
-        if (chrome.runtime.lastError) {
-          console.error('Failed to create batch notification:', chrome.runtime.lastError);
-        } else {
-          console.log('Batch notification created successfully:', notificationId);
-        }
-      });
+      await this.createDesktopSystemNotification(mapping, notificationOptions);
     }
   }
 
