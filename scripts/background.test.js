@@ -1442,4 +1442,40 @@ describe('desktop notification actions', () => {
     await manager.removeDesktopMapping(failed.desktopId);
     expect(state.desktopMappings).toEqual([]);
   });
+
+  test.each([
+    ['single', [null]],
+    ['batch', [null, null]]
+  ])('removes only the originating %s mapping when desktop creation fails', async (mappingType, records) => {
+    const chromeMock = createChromeMock();
+    chromeMock.notifications.create.mockImplementation((_notificationId, _options, callback) => {
+      chromeMock.runtime.lastError = { message: 'platform rejected notification' };
+      callback();
+      chromeMock.runtime.lastError = undefined;
+    });
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { NotificationManager } = loadBackgroundModule(chromeMock);
+    const manager = new NotificationManager();
+    const state = configureDesktopManager(manager);
+    const unrelated = {
+      desktopId: 'issue:unrelated', profileId: 'profile-a', recordId: 'other',
+      issueUrl: 'https://redmine.example.com/issues/2', type: 'single',
+      expiresAt: Date.now() + 10000
+    };
+    state.desktopMappings.push(unrelated);
+    const notifications = records.map(() => state.history[0]);
+
+    await expect(manager.showDesktopNotification(notifications, 'new')).resolves.toBeUndefined();
+
+    expect(state.desktopMappings).toEqual([unrelated]);
+    expect(chromeMock.notifications.create).toHaveBeenCalledWith(
+      expect.stringMatching(mappingType === 'single' ? /^issue:/ : /^batch:/),
+      expect.any(Object),
+      expect.any(Function)
+    );
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Failed to create notification:',
+      expect.objectContaining({ message: 'platform rejected notification' })
+    );
+  });
 });
