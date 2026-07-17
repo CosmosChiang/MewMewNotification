@@ -4,13 +4,17 @@
 
 Before dependency cleanup, the repository had 127 tests and package metadata reported 437 production dependency entries. The audit contained 14 findings: 10 low, 2 moderate, 2 high, and 0 critical. The extension itself uses no npm runtime package.
 
-The restored toolchain has zero production dependencies and only direct development tools for Jest, coverage instrumentation, ESLint, locale/workflow validation, packaging, OpenSpec, and Playwright. The blocking `npm run audit:high` gate reports zero high or critical findings. Moderate development-tool findings are visible in the audit output and do not enter the extension ZIP.
+The restored toolchain has zero production dependencies and only direct development tools for Jest, coverage instrumentation, ESLint, locale/workflow validation, packaging, OpenSpec, and Playwright. The blocking `npm run audit:moderate` gate reports zero moderate, high, or critical findings.
 
 ## Required gates
 
 Node 22 and 24 run lint, locale parity, workflow policy, controller-instrumented unit coverage, audit, and strict OpenSpec validation. Node 24 additionally runs the fake Redmine integration layer, packaged unpacked-Chromium smoke test, version check, deterministic allowlist packaging, and ZIP validation.
 
 All workflow Actions are pinned to full commit SHAs. Dependabot proposes npm and GitHub Actions updates weekly. Top-level workflow permission is read-only; release write and attestation permissions are scoped to their jobs.
+
+## Superseded dependency pull requests
+
+This feature change incorporates and verifies the intended `adm-zip` and `js-yaml` upgrades from Dependabot PRs #12 and #13 on the current codebase. After the feature PR merges, close #12 and #13 as superseded and link the merged feature PR; do not merge their stale branch bases independently.
 
 ## Artifact identity
 

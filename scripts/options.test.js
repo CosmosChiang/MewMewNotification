@@ -18,6 +18,8 @@ function createMockElement(overrides = {}) {
     children: [],
     addEventListener: jest.fn(),
     removeEventListener: jest.fn(),
+    click: jest.fn(),
+    remove: jest.fn(),
     appendChild: jest.fn((child) => {
       element.children.push(child);
       if (
@@ -95,7 +97,8 @@ function createDocument(elements) {
     querySelectorAll: jest.fn(() => []),
     querySelector: jest.fn(() => null),
     addEventListener: jest.fn(),
-    createElement: jest.fn(() => createMockElement())
+    createElement: jest.fn(() => createMockElement()),
+    body: createMockElement()
   };
 }
 
@@ -108,6 +111,7 @@ function loadBrowserClass(relativePath, exportName) {
     require,
     console,
     URL,
+    Blob: global.Blob,
     setTimeout,
     clearTimeout,
     document: global.document,
@@ -117,6 +121,7 @@ function loadBrowserClass(relativePath, exportName) {
     confirm: global.confirm,
     alert: global.alert,
     ConfigManager: global.ConfigManager,
+    validateDiagnosticSnapshot: global.validateDiagnosticSnapshot,
     __coverage__: global.__coverage__ = global.__coverage__ || {}
   };
 
@@ -143,6 +148,11 @@ describe('OptionsManager', () => {
       notificationsStatus: createMockElement(),
       saveNotificationsBtn: createMockElement(),
       testConnectionBtn: createMockElement(),
+      privacyNoticeAcknowledged: createMockElement({ checked: false }),
+      diagnosticsEnabled: createMockElement({ checked: false }),
+      diagnosticsStatus: createMockElement(),
+      exportDiagnosticsBtn: createMockElement(),
+      clearDiagnosticsBtn: createMockElement(),
       redmineUrl: createMockElement({ value: 'https://redmine.example.com' }),
       apiKey: createMockElement({ value: 'valid-api-key-123' }),
       checkInterval: createMockElement({ value: '30' }),
@@ -183,6 +193,9 @@ describe('OptionsManager', () => {
     global.confirm = jest.fn(() => true);
     global.alert = jest.fn();
     global.fetch = jest.fn();
+    global.validateDiagnosticSnapshot = jest.fn(() => true);
+    URL.createObjectURL = jest.fn(() => 'blob:diagnostics');
+    URL.revokeObjectURL = jest.fn();
     global.chrome = {
       storage: {
         sync: {
@@ -216,6 +229,10 @@ describe('OptionsManager', () => {
 
     manager = new OptionsManager();
     manager.translate = jest.fn((key) => key);
+    manager.privacyConsent = {
+      version: 1,
+      acceptedAt: 1700000000000
+    };
     manager.settings = {
       redmineUrl: '',
       apiKey: '',
@@ -294,6 +311,136 @@ describe('OptionsManager', () => {
       valid: false,
       message: 'apiKeyInvalidFormat'
     });
+  });
+
+  test('keeps diagnostics off by default and stores the opt-in only locally', async () => {
+    manager.diagnosticStore = null;
+    global.chrome.storage.local.get.mockResolvedValue({});
+    global.chrome.storage.local.set.mockResolvedValue(undefined);
+    global.chrome.storage.local.remove.mockResolvedValue(undefined);
+
+    await expect(manager.loadDiagnosticsState()).resolves.toBe(false);
+    expect(elements.diagnosticsEnabled.checked).toBe(false);
+
+    await expect(manager.setDiagnosticsEnabled(true)).resolves.toBe(true);
+    expect(global.chrome.storage.local.set).toHaveBeenCalledWith({
+      diagnosticsEnabledV1: true
+    });
+    expect(elements.diagnosticsEnabled.checked).toBe(true);
+
+    await expect(manager.setDiagnosticsEnabled(false)).resolves.toBe(true);
+    expect(global.chrome.storage.local.set).toHaveBeenCalledWith({
+      diagnosticsEnabledV1: false
+    });
+    expect(global.chrome.storage.local.remove).toHaveBeenCalledWith([
+      'diagnosticEventsV1'
+    ]);
+    expect(elements.diagnosticsEnabled.checked).toBe(false);
+  });
+
+  test('clears retained events without changing the enabled state', async () => {
+    manager.diagnosticsEnabled = true;
+    manager.diagnosticStore = {
+      clearEvents: jest.fn().mockResolvedValue(undefined)
+    };
+
+    await expect(manager.clearDiagnostics()).resolves.toBe(true);
+    expect(manager.diagnosticStore.clearEvents).toHaveBeenCalled();
+    expect(manager.diagnosticsEnabled).toBe(true);
+    expect(elements.diagnosticsStatus.textContent).toBe('diagnosticsClearedSuccess');
+  });
+
+  test('exports a pretty-printed one-time snapshot while retention is disabled', async () => {
+    const diagnostics = {
+      schemaVersion: 1,
+      generatedAt: '2026-07-17T12:34:56.000Z',
+      diagnostics: { enabled: false },
+      events: []
+    };
+    global.chrome.runtime.sendMessage.mockResolvedValue({
+      success: true,
+      diagnostics
+    });
+
+    await expect(manager.exportDiagnostics()).resolves.toBe(true);
+    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith({
+      action: 'getDiagnostics'
+    });
+    expect(global.validateDiagnosticSnapshot).toHaveBeenCalledWith(diagnostics);
+    const blob = URL.createObjectURL.mock.calls[0][0];
+    expect(blob.type).toBe('application/json');
+    await expect(blob.text()).resolves.toBe(JSON.stringify(diagnostics, null, 2));
+    const anchor = global.document.createElement.mock.results.at(-1).value;
+    expect(anchor.download).toBe('mewmew-diagnostics-20260717-123456.json');
+    expect(anchor.click).toHaveBeenCalled();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:diagnostics');
+  });
+
+  test('rejects unsafe exports and never creates a file', async () => {
+    global.chrome.runtime.sendMessage.mockResolvedValue({
+      success: false,
+      error: 'diagnosticsUnsafe'
+    });
+
+    await expect(manager.exportDiagnostics()).resolves.toBe(false);
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(elements.diagnosticsStatus.textContent).toBe('diagnosticsExportError');
+  });
+
+  test('blocks connection testing before the current privacy notice is acknowledged', async () => {
+    manager.privacyConsent = null;
+    elements.privacyNoticeAcknowledged.checked = false;
+
+    await manager.testConnection();
+
+    expect(global.chrome.permissions.contains).not.toHaveBeenCalled();
+    expect(global.chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(global.chrome.storage.local.set).not.toHaveBeenCalled();
+    expect(elements.connectionStatus.className).toBe('status-message error');
+    expect(elements.connectionStatus.textContent).toBe('privacyConsentRequired');
+  });
+
+  test('accepts the current privacy notice locally before testing a connection', async () => {
+    manager.privacyConsent = {
+      version: 0,
+      acceptedAt: 1690000000000
+    };
+    elements.privacyNoticeAcknowledged.checked = true;
+    global.chrome.storage.local.set.mockResolvedValue(undefined);
+    global.chrome.permissions.contains.mockResolvedValue(true);
+    global.chrome.runtime.sendMessage.mockResolvedValue({ success: true });
+
+    await manager.testConnection();
+
+    expect(global.chrome.storage.local.set).toHaveBeenCalledWith({
+      privacyNoticeConsentV1: {
+        version: 1,
+        acceptedAt: expect.any(Number)
+      }
+    });
+    expect(global.chrome.runtime.sendMessage).toHaveBeenCalledWith({
+      action: 'testConnection',
+      redmineUrl: 'https://redmine.example.com',
+      apiKey: 'valid-api-key-123'
+    });
+  });
+
+  test('loads existing configured settings without requiring privacy acknowledgement', async () => {
+    manager.privacyConsent = null;
+    global.chrome.storage.sync.get.mockResolvedValue({
+      redmineUrl: 'https://redmine.example.com'
+    });
+    global.chrome.storage.local.get.mockResolvedValue({
+      apiKey: 'existing-api-key-123'
+    });
+
+    await manager.loadSettings();
+
+    expect(manager.settings.redmineUrl).toBe('https://redmine.example.com');
+    expect(manager.settings.apiKey).toBe('existing-api-key-123');
+    expect(global.chrome.storage.local.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ privacyNoticeConsentV1: expect.anything() })
+    );
   });
 
   test('saves notification settings with sanitized numeric values', async () => {
@@ -617,5 +764,93 @@ describe('OptionsManager', () => {
         'Request to https://redmine.example.com failed for token abcdefghijklmnopqrstuvwxyz'
       )
     ).toContain('[KEY]');
+  });
+
+  test('updates the complete Options presentation mapping and version label', () => {
+    global.document.documentElement = { lang: 'en' };
+    global.chrome.runtime.getManifest = jest.fn(() => ({ version: '1.5.0' }));
+    elements.checkInterval.options = [
+      { value: '1', text: '' },
+      { value: '5', text: '' },
+      { value: '10', text: '' },
+      { value: '15', text: '' },
+      { value: '30', text: '' },
+      { value: '60', text: '' }
+    ];
+    elements.languageSelect.options = [
+      { value: 'en', text: 'English' },
+      { value: 'ja', text: '日本語' }
+    ];
+
+    manager.updateUI();
+
+    expect(global.document.title).toBe('optionsTitle');
+    expect(elements.settingsTitle.textContent).toBe('optionsTitle');
+    expect(elements.privacyNoticeTitle.textContent).toBe('privacyNoticeTitle');
+    expect(elements.aboutPrivacyPolicyLink.textContent).toBe('privacyPolicyLink');
+    expect(elements.aboutVersion.textContent).toBe('versionLabel: 1.5.0');
+    expect(elements.redmineUrl.placeholder).toBe('redmineUrlPlaceholder');
+    expect(elements.checkInterval.options[0].text).toBe('minute1');
+  });
+
+  test('updates empty version and optional select branches safely', () => {
+    global.chrome.runtime.getManifest = jest.fn(() => ({ version: '' }));
+    elements.checkInterval.options = [{ value: 'unexpected', text: 'unchanged' }];
+    elements.notificationBundlingWindow.options = [];
+    elements.languageSelect.options = [];
+
+    manager.updateVersionDisplay();
+    manager.updateSelectOptions();
+
+    expect(elements.aboutVersion.textContent).toBe('versionLabel');
+    expect(elements.checkInterval.options[0].text).toBe('unchanged');
+  });
+
+  test('supports keyboard tab navigation and tab panel activation', () => {
+    const tabs = ['redmine', 'notifications', 'language', 'about'].map(name => createMockElement({
+      dataset: { tab: name },
+      focus: jest.fn()
+    }));
+    const panels = tabs.map(tab => createMockElement({ id: tab.dataset.tab }));
+    global.document.querySelectorAll = jest.fn(selector => (
+      selector === '.tab-button' ? tabs : panels
+    ));
+    global.document.querySelector = jest.fn(selector => (
+      tabs.find(tab => selector.includes(tab.dataset.tab))
+    ));
+    global.document.getElementById = jest.fn(id => (
+      panels.find(panel => panel.id === id) || elements[id] || createMockElement()
+    ));
+    const preventDefault = jest.fn();
+
+    for (const key of ['ArrowRight', 'ArrowLeft', 'Home', 'End']) {
+      manager.handleTabKeydown({
+        key,
+        currentTarget: tabs[1],
+        preventDefault
+      });
+    }
+    manager.handleTabKeydown({
+      key: 'Escape',
+      currentTarget: tabs[1],
+      preventDefault
+    });
+
+    expect(preventDefault).toHaveBeenCalledTimes(4);
+    expect(tabs.some(tab => tab.focus.mock.calls.length > 0)).toBe(true);
+    expect(panels.some(panel => panel.hidden === false)).toBe(true);
+  });
+
+  test('populates form controls and manages auto-hiding status messages', () => {
+    manager.populateForm();
+    manager.setStatusMessage('redmineStatus', 'success', 'saved', true);
+    expect(elements.redmineStatus.style.display).toBe('block');
+    expect(elements.redmineStatus.textContent).toBe('saved');
+    jest.advanceTimersByTime(5000);
+    expect(elements.redmineStatus.style.display).toBe('none');
+    manager.showPersistentStatus('redmineStatus', 'info', 'persistent');
+    expect(elements.redmineStatus.style.display).toBe('block');
+    manager.clearStatusMessage('redmineStatus');
+    expect(elements.redmineStatus.style.display).toBe('none');
   });
 });

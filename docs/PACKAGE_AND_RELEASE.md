@@ -6,7 +6,7 @@ Use Node 24 and install with `npm ci --ignore-scripts`.
 npm run quality
 npm run test:integration -- --silent
 npm run openspec:check
-npm run audit:high
+npm run audit:moderate
 npm run package
 npm run package:validate
 npm run test:smoke

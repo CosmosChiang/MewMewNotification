@@ -6,11 +6,21 @@
     "manifest.json",
     "options.html",
     "popup.html",
+    "scripts/background/notification-policy.js",
+    "scripts/background/notification-service.js",
+    "scripts/background/diagnostic-snapshot.js",
+    "scripts/background/profile-state-repository.js",
+    "scripts/background/redmine-api.js",
+    "scripts/background/runtime-bootstrap.js",
+    "scripts/background/runtime-router.js",
     "scripts/options.js",
     "scripts/popup.js",
     "scripts/shared/config-manager.js",
+    "scripts/shared/diagnostic-event-store.js",
     "scripts/shared/i18n.js",
-    "scripts/shared/profile-state-manager.js"
+    "scripts/shared/privacy-consent.js",
+    "scripts/shared/profile-state-manager.js",
+    "scripts/shared/safe-logger.js"
   ],
   "directories": [
     "_locales",

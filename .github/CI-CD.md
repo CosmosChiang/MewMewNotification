@@ -12,8 +12,8 @@
 
 **執行內容**:
 
-- 多 Node.js 版本測試 (18.x, 20.x)
-- 安裝依賴 (`npm ci`)
+- 多 Node.js 版本測試 (22.x, 24.x)
+- 安裝依賴 (`npm ci --ignore-scripts`)
 - 程式碼檢查 (ESLint, 如果配置)
 - 執行單元測試 (`npm test`)
 - 生成測試覆蓋率報告
@@ -32,12 +32,12 @@
 
 ### 發布階段 (Release Job)
 
-**觸發條件**: main 分支 push 且前兩階段成功
+**觸發條件**: 推送符合版本的 `v*` tag 且前置階段成功
 
 **執行內容**:
 
 - 創建 GitHub Release
-- 自動產生版本標籤
+- 驗證 tag、manifest 與 package 版本一致
 - 上傳可安裝的擴充功能檔案
 - 生成發布說明
 

@@ -1,8 +1,29 @@
 class OptionsManager {
   constructor() {
+    const SafeLoggerClass = globalThis.SafeLogger;
+    this.logger = SafeLoggerClass ? new SafeLoggerClass() : {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {}
+    };
+    const I18nManagerClass = globalThis.I18nManager;
+    this.i18n = I18nManagerClass ? new I18nManagerClass({
+      storage: globalThis.chrome?.storage?.sync,
+      fetch: globalThis.fetch,
+      localeUrlResolver: language => `_locales/${language}/messages.json`,
+      documentRoot: globalThis.document?.documentElement,
+      logger: this.logger
+    }) : null;
     this.currentLanguage = 'en';
     this.translations = {};
     this.settings = {};
+    this.privacyConsent = null;
+    const DiagnosticEventStoreClass = globalThis.DiagnosticEventStore;
+    this.diagnosticStore = DiagnosticEventStoreClass
+      ? new DiagnosticEventStoreClass({ storageArea: globalThis.chrome?.storage?.local })
+      : null;
+    this.diagnosticsEnabled = false;
     this.availableNotificationProjects = [];
     this.statusHideTimers = new Map();
     this.init();
@@ -11,10 +32,9 @@ class OptionsManager {
   async init() {
     await this.loadLanguage();
     await this.loadSettings();
+    await this.loadPrivacyConsent();
+    await this.loadDiagnosticsState();
     this.setupEventListeners();
-    
-    // Initialize language options dynamically (with fallback to static options)
-    await this.initializeLanguageOptions();
     
     this.updateUI();
     await this.syncConfiguredPermissionStatus();
@@ -23,34 +43,14 @@ class OptionsManager {
   }
 
   async loadLanguage(languageOverride) {
-    try {
-      if (languageOverride) {
-        this.currentLanguage = languageOverride;
-      } else {
-        const result = await chrome.storage.sync.get(['language']);
-        const configManagerClass = this.getConfigManagerClass();
-        const languageSettings = configManagerClass?.normalizeStorageResult
-          ? configManagerClass.normalizeStorageResult(result)
-          : (result && typeof result === 'object' ? result : {});
-        this.currentLanguage = languageSettings.language || 'en';
-      }
-      
-      const response = await fetch(`_locales/${this.currentLanguage}/messages.json`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      this.translations = await response.json();
-      document.documentElement.lang = this.currentLanguage.replace('_', '-');
-      return this.translations;
-    } catch (error) {
-      console.error('Failed to load language:', error);
-      // Fallback to English if loading fails
-      if (this.currentLanguage !== 'en') {
-        return this.loadLanguage('en');
-      }
+    if (!this.i18n) {
       this.translations = {};
       return this.translations;
     }
+
+    this.translations = await this.i18n.loadLanguage(languageOverride);
+    this.currentLanguage = this.i18n.getCurrentLanguage();
+    return this.translations;
   }
 
   async loadSettings() {
@@ -93,21 +93,176 @@ class OptionsManager {
   }
 
   translate(key, substitutions = []) {
-    const translation = this.translations[key];
-    if (!translation) return key;
-    
-    let message = translation.message;
-    if (substitutions.length > 0) {
-      substitutions.forEach((sub, index) => {
-        message = message.replace(`$${index + 1}`, sub);
-      });
-    }
-    
-    return message;
+    return this.i18n ? this.i18n.translate(key, substitutions) : key;
   }
 
   getConfigManagerClass() {
     return globalThis.ConfigManager || undefined;
+  }
+
+  getPrivacyConsentApi() {
+    return globalThis.PrivacyConsent || {
+      PRIVACY_NOTICE_VERSION: 1,
+      PRIVACY_CONSENT_STORAGE_KEY: 'privacyNoticeConsentV1',
+      isCurrentPrivacyConsent: consent => Boolean(
+        consent
+        && consent.version === 1
+        && Number.isFinite(consent.acceptedAt)
+        && consent.acceptedAt > 0
+      ),
+      readPrivacyConsent: async storageArea => {
+        const result = await storageArea.get(['privacyNoticeConsentV1']);
+        return result?.privacyNoticeConsentV1 || null;
+      },
+      writePrivacyConsent: async (storageArea, now = Date.now()) => {
+        const consent = { version: 1, acceptedAt: now };
+        await storageArea.set({ privacyNoticeConsentV1: consent });
+        return consent;
+      }
+    };
+  }
+
+  async loadPrivacyConsent() {
+    const privacyApi = this.getPrivacyConsentApi();
+    this.privacyConsent = await privacyApi.readPrivacyConsent(chrome.storage.local);
+    this.updatePrivacyConsentControl();
+    return this.privacyConsent;
+  }
+
+  async loadDiagnosticsState() {
+    if (this.diagnosticStore) {
+      await this.diagnosticStore.initialize();
+      this.diagnosticsEnabled = this.diagnosticStore.isEnabled();
+    } else {
+      const stored = await chrome.storage.local.get(['diagnosticsEnabledV1']);
+      this.diagnosticsEnabled = stored?.diagnosticsEnabledV1 === true;
+    }
+    this.updateDiagnosticsControl();
+    return this.diagnosticsEnabled;
+  }
+
+  updateDiagnosticsControl() {
+    const checkbox = document.getElementById('diagnosticsEnabled');
+    if (checkbox) {
+      checkbox.checked = this.diagnosticsEnabled === true;
+    }
+  }
+
+  async setDiagnosticsEnabled(enabled) {
+    try {
+      if (this.diagnosticStore) {
+        await this.diagnosticStore.setEnabled(enabled);
+      } else {
+        await chrome.storage.local.set({ diagnosticsEnabledV1: enabled === true });
+        if (!enabled) {
+          await chrome.storage.local.remove(['diagnosticEventsV1']);
+        }
+      }
+      this.diagnosticsEnabled = enabled === true;
+      this.updateDiagnosticsControl();
+      this.showStatus(
+        'diagnosticsStatus',
+        'success',
+        this.translate(this.diagnosticsEnabled ? 'diagnosticsEnabledSuccess' : 'diagnosticsDisabledSuccess')
+      );
+      return true;
+    } catch {
+      this.updateDiagnosticsControl();
+      this.showStatus('diagnosticsStatus', 'error', this.translate('diagnosticsUpdateError'));
+      return false;
+    }
+  }
+
+  async clearDiagnostics() {
+    try {
+      if (this.diagnosticStore) {
+        await this.diagnosticStore.clearEvents();
+      } else {
+        await chrome.storage.local.remove(['diagnosticEventsV1']);
+      }
+      this.showStatus('diagnosticsStatus', 'success', this.translate('diagnosticsClearedSuccess'));
+      return true;
+    } catch {
+      this.showStatus('diagnosticsStatus', 'error', this.translate('diagnosticsClearError'));
+      return false;
+    }
+  }
+
+  createDiagnosticsFilename(date = new Date()) {
+    const compact = date.toISOString()
+      .replace(/[-:]/g, '')
+      .replace('T', '-')
+      .slice(0, 15);
+    return `mewmew-diagnostics-${compact}.json`;
+  }
+
+  async exportDiagnostics() {
+    let objectUrl;
+    let anchor;
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'getDiagnostics' });
+      if (!response?.success || !response.diagnostics) {
+        throw new Error(response?.error || 'diagnosticsUnsafe');
+      }
+      const validator = globalThis.validateDiagnosticSnapshot;
+      if (typeof validator !== 'function' || validator(response.diagnostics) !== true) {
+        throw new Error('diagnosticsUnsafe');
+      }
+      const content = JSON.stringify(response.diagnostics, null, 2);
+      const blob = new Blob([content], { type: 'application/json' });
+      objectUrl = URL.createObjectURL(blob);
+      anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = this.createDiagnosticsFilename(new Date(response.diagnostics.generatedAt));
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      this.showStatus('diagnosticsStatus', 'success', this.translate('diagnosticsExportSuccess'));
+      return true;
+    } catch {
+      this.showStatus('diagnosticsStatus', 'error', this.translate('diagnosticsExportError'));
+      return false;
+    } finally {
+      anchor?.remove?.();
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+  }
+
+  updatePrivacyConsentControl() {
+    const checkbox = document.getElementById('privacyNoticeAcknowledged');
+    if (!checkbox) {
+      return;
+    }
+
+    const privacyApi = this.getPrivacyConsentApi();
+    const hasCurrentConsent = privacyApi.isCurrentPrivacyConsent(this.privacyConsent);
+    checkbox.checked = hasCurrentConsent;
+    checkbox.disabled = hasCurrentConsent;
+  }
+
+  async ensurePrivacyConsent(statusElementId) {
+    const privacyApi = this.getPrivacyConsentApi();
+    if (privacyApi.isCurrentPrivacyConsent(this.privacyConsent)) {
+      return true;
+    }
+
+    const checkbox = document.getElementById('privacyNoticeAcknowledged');
+    if (!checkbox?.checked) {
+      this.showStatus(statusElementId, 'error', this.translate('privacyConsentRequired'));
+      checkbox?.focus?.();
+      return false;
+    }
+
+    try {
+      this.privacyConsent = await privacyApi.writePrivacyConsent(chrome.storage.local);
+      this.updatePrivacyConsentControl();
+      return true;
+    } catch {
+      this.showStatus(statusElementId, 'error', this.translate('privacyConsentSaveError'));
+      return false;
+    }
   }
 
   resolveErrorMessage(message) {
@@ -608,6 +763,10 @@ class OptionsManager {
       'apiKeyLabel': 'apiKey',
       'apiKeyHelp': 'apiKeyHelp',
       'testConnectionBtn': 'testConnection',
+      'privacyNoticeTitle': 'privacyNoticeTitle',
+      'privacyNoticeSummary': 'privacyNoticeSummary',
+      'privacyPolicyLink': 'privacyPolicyLink',
+      'privacyNoticeAcknowledgedLabel': 'privacyNoticeAcknowledgedLabel',
       'notificationSettingsTitle': 'notificationSettings',
       'checkIntervalLabel': 'checkInterval',
       'enableNotificationsLabel': 'enableDesktopNotifications',
@@ -658,6 +817,13 @@ class OptionsManager {
       'feature11': 'feature11',
       'supportTitle': 'support',
       'supportText': 'supportText',
+      'privacyTitle': 'privacyTitle',
+      'aboutPrivacyPolicyLink': 'privacyPolicyLink',
+      'diagnosticsTitle': 'diagnosticsTitle',
+      'diagnosticsDescription': 'diagnosticsDescription',
+      'diagnosticsEnabledLabel': 'diagnosticsEnabledLabel',
+      'exportDiagnosticsBtn': 'exportDiagnostics',
+      'clearDiagnosticsBtn': 'clearDiagnostics',
       'resetBtn': 'reset',
       'saveRedmineBtn': 'saveRedmineSettings',
       'saveNotificationsBtn': 'saveNotificationSettings',
@@ -773,155 +939,6 @@ class OptionsManager {
   }
 
   // Method to get supported languages dynamically
-  getSupportedLanguages() {
-    const languageSelect = document.getElementById('languageSelect');
-    if (!languageSelect) return [];
-
-    return Array.from(languageSelect.options).map(option => ({
-      code: option.value,
-      name: option.text
-    }));
-  }
-
-  // Method to add a new language option programmatically
-  addLanguageOption(languageCode, displayName) {
-    const languageSelect = document.getElementById('languageSelect');
-    if (!languageSelect) return;
-
-    // Check if language already exists
-    const existingOption = Array.from(languageSelect.options).find(
-      option => option.value === languageCode
-    );
-    
-    if (existingOption) {
-      console.warn(`Language ${languageCode} already exists`);
-      return;
-    }
-
-    // Create new option
-    const newOption = document.createElement('option');
-    newOption.value = languageCode;
-    newOption.text = displayName;
-    
-    // Add to select (sorted alphabetically by display name)
-    const options = Array.from(languageSelect.options);
-    const insertIndex = options.findIndex(option => option.text > displayName);
-    
-    if (insertIndex === -1) {
-      languageSelect.appendChild(newOption);
-    } else {
-      languageSelect.insertBefore(newOption, options[insertIndex]);
-    }
-
-    console.log(`Added language option: ${languageCode} - ${displayName}`);
-  }
-
-  // Method to automatically detect available languages from _locales directory
-  async getAvailableLanguages() {
-    const defaultLanguages = [
-      { code: 'en', name: 'English' },
-      { code: 'zh_TW', name: '繁體中文' },
-      { code: 'zh_CN', name: '简体中文' },
-      { code: 'ja', name: '日本語' }
-    ];
-
-    const availableLanguages = [];
-    
-    for (const lang of defaultLanguages) {
-      try {
-        // Try to fetch the language file to verify it exists
-        const response = await fetch(`_locales/${lang.code}/messages.json`);
-        if (response.ok) {
-          availableLanguages.push(lang);
-        }
-      } catch (error) {
-        console.warn(`Language ${lang.code} not available:`, error);
-      }
-    }
-
-    return availableLanguages;
-  }
-
-  // Method to validate language completeness
-  async validateLanguageFile(languageCode) {
-    try {
-      const response = await fetch(`_locales/${languageCode}/messages.json`);
-      if (!response.ok) {
-        return { valid: false, error: 'Language file not found' };
-      }
-
-      const translations = await response.json();
-      const requiredKeys = Object.keys(this.translations); // Current language keys as reference
-      const missingKeys = requiredKeys.filter(key => !translations[key]);
-
-      return {
-        valid: missingKeys.length === 0,
-        missingKeys: missingKeys,
-        totalKeys: requiredKeys.length,
-        availableKeys: Object.keys(translations).length
-      };
-    } catch (error) {
-      return { valid: false, error: error.message };
-    }
-  }
-
-  // Enhanced method to initialize language options dynamically
-  async initializeLanguageOptions() {
-    const languageSelect = document.getElementById('languageSelect');
-    if (!languageSelect) return;
-
-    try {
-      // Get available languages
-      const availableLanguages = await this.getAvailableLanguages();
-      
-      // Clear existing options
-      languageSelect.innerHTML = '';
-      
-      // Add available languages
-      availableLanguages.forEach(lang => {
-        const option = document.createElement('option');
-        option.value = lang.code;
-        option.text = lang.name;
-        languageSelect.appendChild(option);
-      });
-
-      // Update with current language translations
-      this.updateLanguageOptions();
-      
-      console.log(`Initialized ${availableLanguages.length} language options`);
-    } catch (error) {
-      console.error('Failed to initialize language options:', error);
-      // Fallback to existing options if dynamic loading fails
-    }
-  }
-
-  // Developer tool: Check all language files for completeness
-  async checkAllLanguageFiles() {
-    const languageSelect = document.getElementById('languageSelect');
-    if (!languageSelect) return;
-
-    const results = {};
-    const languages = Array.from(languageSelect.options).map(option => option.value);
-
-    console.log('🌐 Checking language file completeness...');
-    
-    for (const langCode of languages) {
-      const validation = await this.validateLanguageFile(langCode);
-      results[langCode] = validation;
-      
-      if (validation.valid) {
-        console.log(`✅ ${langCode}: Complete (${validation.availableKeys} keys)`);
-      } else {
-        console.warn(`⚠️ ${langCode}: ${validation.error || 'Incomplete'}`);
-        if (validation.missingKeys) {
-          console.warn(`   Missing keys (${validation.missingKeys.length}/${validation.totalKeys}):`, validation.missingKeys);
-        }
-      }
-    }
-
-    return results;
-  }
-
   setupEventListeners() {
     // Tab switching
     document.querySelectorAll('.tab-button').forEach(button => {
@@ -951,6 +968,17 @@ class OptionsManager {
 
     document.getElementById('refreshNotificationProjectsBtn').addEventListener('click', () => {
       this.loadNotificationProjects({ forceRefresh: true });
+    });
+
+    const diagnosticsEnabled = document.getElementById('diagnosticsEnabled');
+    diagnosticsEnabled?.addEventListener('change', event => {
+      this.setDiagnosticsEnabled(event.target.checked);
+    });
+    document.getElementById('exportDiagnosticsBtn')?.addEventListener('click', () => {
+      this.exportDiagnostics();
+    });
+    document.getElementById('clearDiagnosticsBtn')?.addEventListener('click', () => {
+      this.clearDiagnostics();
     });
 
     [
@@ -985,6 +1013,11 @@ class OptionsManager {
         this.loadLanguage().then(() => {
           this.updateUI();
         });
+      }
+      if (namespace === 'local' && changes.diagnosticsEnabledV1) {
+        this.diagnosticsEnabled = changes.diagnosticsEnabledV1.newValue === true;
+        this.diagnosticStore?.handleStorageChanged(changes, namespace);
+        this.updateDiagnosticsControl();
       }
     });
   }
@@ -1052,6 +1085,10 @@ class OptionsManager {
   async testConnection() {
     const button = document.getElementById('testConnectionBtn');
     const statusDiv = document.getElementById('connectionStatus');
+
+    if (!await this.ensurePrivacyConsent('connectionStatus')) {
+      return;
+    }
     
     // Get current form values
     const redmineUrl = this.sanitizeInput(document.getElementById('redmineUrl').value);
@@ -1125,6 +1162,10 @@ class OptionsManager {
 
   async saveRedmineSettings() {
     const button = document.getElementById('saveRedmineBtn');
+
+    if (!await this.ensurePrivacyConsent('redmineStatus')) {
+      return;
+    }
     
     // Get Redmine form values with proper sanitization
     const redmineUrl = this.sanitizeInput(document.getElementById('redmineUrl').value);
@@ -1321,107 +1362,6 @@ class OptionsManager {
     }
   }
 
-  async saveSettings() {
-    const button = document.getElementById('saveBtn');
-    
-    // Get form values
-    const redmineUrl = this.sanitizeInput(document.getElementById('redmineUrl').value);
-    const apiKey = document.getElementById('apiKey').value.trim();
-    const checkIntervalValue = document.getElementById('checkInterval').value;
-    const maxNotificationsValue = document.getElementById('maxNotifications').value;
-
-    // Validate URL format
-    const urlValidation = this.validateUrl(redmineUrl);
-    if (!urlValidation.valid) {
-      this.showStatus('saveStatus', 'error', urlValidation.message);
-      return;
-    }
-    const normalizedUrl = urlValidation.normalizedUrl;
-
-    // Validate API key format
-    const apiKeyValidation = this.validateApiKey(apiKey);
-    if (!apiKeyValidation.valid) {
-      this.showStatus('saveStatus', 'error', apiKeyValidation.message);
-      return;
-    }
-
-    // Validate check interval
-    const checkIntervalValidation = this.validateNumber(checkIntervalValue, 1, 1440, this.translate('checkInterval'));
-    if (!checkIntervalValidation.valid) {
-      this.showStatus('saveStatus', 'error', checkIntervalValidation.message);
-      return;
-    }
-
-    // Validate max notifications
-    const maxNotificationsValidation = this.validateNumber(maxNotificationsValue, 1, 1000, this.translate('maxNotifications'));
-    if (!maxNotificationsValidation.valid) {
-      this.showStatus('saveStatus', 'error', maxNotificationsValidation.message);
-      return;
-    }
-
-    const settings = {
-      redmineUrl: normalizedUrl,
-      apiKey: apiKey,
-      checkInterval: checkIntervalValidation.value,
-      enableNotifications: document.getElementById('enableNotifications').checked,
-      enableSound: document.getElementById('enableSound').checked,
-      onlyMyProjects: document.getElementById('onlyMyProjects').checked,
-      includeWatchedIssues: document.getElementById('includeWatchedIssues').checked,
-      maxNotifications: maxNotificationsValidation.value,
-      language: document.getElementById('languageSelect').value
-    };
-
-    // Disable button and show loading
-    button.disabled = true;
-    button.textContent = this.translate('saving');
-
-    try {
-      const permissionResult = await this.ensureOriginPermission(normalizedUrl);
-      if (!permissionResult.granted) {
-        this.showStatus('saveStatus', 'error', permissionResult.message);
-        return;
-      }
-
-      const previousUrl = this.settings.redmineUrl;
-      const configManagerClass = this.getConfigManagerClass();
-      const { syncSettings, localSettings } = configManagerClass?.splitSettingsBySensitivity
-        ? configManagerClass.splitSettingsBySensitivity(settings)
-        : {
-            syncSettings: { ...settings, apiKey: undefined },
-            localSettings: { apiKey: apiKey }
-          };
-
-      if (syncSettings.apiKey === undefined) {
-        delete syncSettings.apiKey;
-      }
-
-      await Promise.all([
-        chrome.storage.sync.set(syncSettings),
-        chrome.storage.local.set(localSettings)
-      ]);
-
-      if (this.shouldRemoveOriginPermission(previousUrl, normalizedUrl)) {
-        await this.removeOriginPermission(previousUrl);
-      }
-
-      // Update local settings
-      this.settings = {
-        ...settings,
-        apiKey: apiKey
-      };
-      this.showStatus(
-        'saveStatus',
-        permissionResult.warningMessage ? 'warning' : 'success',
-        this.buildStatusMessage('settingsSaved', permissionResult.warningMessage)
-      );
-    } catch (error) {
-      this.showStatus('saveStatus', 'error', this.translate('saveError') + ': ' + error.message);
-    } finally {
-      button.disabled = false;
-      button.textContent = this.translate('save');
-    }
-  }
-
   async resetSettings() {
     if (!confirm(this.translate('confirmReset'))) {
       return;
@@ -1462,17 +1402,6 @@ class OptionsManager {
       this.showStatus('saveStatus', 'success', this.translate('settingsReset'));
     } catch (error) {
       this.showStatus('saveStatus', 'error', this.translate('resetError') + ': ' + error.message);
-    }
-  }
-
-  async changeLanguage(language) {
-    try {
-      await chrome.storage.sync.set({ language });
-      this.currentLanguage = language;
-      await this.loadLanguage();
-      this.updateUI();
-    } catch (error) {
-      console.error('Failed to change language:', error);
     }
   }
 

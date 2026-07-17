@@ -117,6 +117,12 @@ describe('PopupManager', () => {
     PopupManager.prototype.init = jest.fn();
 
     manager = new PopupManager();
+    manager.logger = {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    };
     manager.translate = jest.fn((key) => key);
     manager.notifications = [];
   });
@@ -446,16 +452,14 @@ describe('PopupManager', () => {
   });
 
   test('does not open tabs for unsafe notification URLs', async () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
     await manager.openNotification({
       url: 'javascript:alert(1)'
     });
 
     expect(global.chrome.tabs.create).not.toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalled();
-
-    consoleSpy.mockRestore();
+    expect(manager.logger.error).toHaveBeenCalledWith('popup_unsafe_url_blocked', {
+      errorCode: 'unsafeUrl'
+    });
   });
 
   test('loads issue action context when expanding advanced actions', async () => {
@@ -701,5 +705,244 @@ describe('PopupManager', () => {
     await manager.toggleAdvancedActions('issue_9');
 
     expect(manager.getIssueActionState('issue_9').error).toBe('backgroundNoResponse');
+  });
+
+  test('updates the complete popup presentation and supports the no-i18n fallback', async () => {
+    manager.updateUI();
+
+    expect(elements.markAllReadBtn.title).toBe('markAllRead');
+    expect(elements.settingsBtn.title).toBe('settings');
+    expect(elements.refreshBtn.title).toBe('refreshNotifications');
+    expect(elements.clearHistoryBtn.textContent).toBe('clearNotificationHistory');
+    expect(elements.notificationSearch.placeholder).toBe('searchNotifications');
+
+    manager.i18n = null;
+    manager.updateUI = jest.fn();
+    await expect(manager.loadLanguage('ja')).resolves.toEqual({});
+    expect(manager.translate('plainKey')).toBe('plainKey');
+    expect(manager.updateUI).toHaveBeenCalled();
+
+    const defaultLoggerManager = new PopupManager();
+    defaultLoggerManager.logger.debug();
+    defaultLoggerManager.logger.info();
+    defaultLoggerManager.logger.warn();
+    defaultLoggerManager.logger.error();
+  });
+
+  test('maps every sync result to a safe health status', () => {
+    elements.syncHealthStatus = createMockElement();
+    manager.currentLanguage = 'en';
+
+    manager.applySyncResult({ status: 'success', lastSuccessAt: '2026-07-17T00:00:00.000Z' });
+    expect(elements.syncHealthStatus.textContent).toContain('syncStatusLastSuccess');
+
+    manager.applySyncResult({ status: 'retryScheduled' });
+    expect(elements.syncHealthStatus.textContent).toBe('syncStatusRetry');
+
+    manager.applySyncResult({ status: 'stale', errorCode: 'timeout_1' });
+    expect(elements.syncHealthStatus.textContent).toBe('syncStatusStale (timeout_1)');
+    expect(elements.syncHealthStatus.setAttribute).toHaveBeenLastCalledWith('aria-live', 'assertive');
+
+    manager.applySyncResult({ status: 'failure', stale: true });
+    expect(elements.syncHealthStatus.textContent).toBe('syncStatusStale');
+
+    manager.applySyncResult({ status: 'failure', errorCode: 'unsafe error body' });
+    expect(elements.syncHealthStatus.textContent).toBe('syncStatusError');
+
+    global.document.getElementById.mockReturnValueOnce(null);
+    expect(() => manager.setHealthStatus('ignored')).not.toThrow();
+  });
+
+  test('handles runtime callback, promise, last-error and thrown transports', async () => {
+    global.chrome.runtime.sendMessage.mockImplementation((_message, callback) => {
+      callback({ success: true });
+      return Promise.resolve({ success: false });
+    });
+    await expect(manager.sendRuntimeMessage({ action: 'callback' })).resolves.toEqual({ success: true });
+
+    global.chrome.runtime.sendMessage.mockReturnValue(Promise.resolve({ success: true }));
+    await expect(manager.sendRuntimeMessage({ action: 'promise' })).resolves.toEqual({ success: true });
+
+    global.chrome.runtime.lastError = { message: 'worker unavailable' };
+    global.chrome.runtime.sendMessage.mockImplementation((_message, callback) => {
+      callback({ success: true });
+    });
+    await expect(manager.sendRuntimeMessage({ action: 'last-error' })).rejects.toThrow('worker unavailable');
+    delete global.chrome.runtime.lastError;
+
+    global.chrome.runtime.sendMessage.mockImplementation(() => {
+      throw new Error('transport failed');
+    });
+    await expect(manager.sendRuntimeMessage({ action: 'throw' })).rejects.toThrow('transport failed');
+
+    expect(manager.resolveRuntimeError(new Error('backgroundNoResponse'))).toBe('backgroundNoResponse');
+    expect(manager.resolveRuntimeError('plain failure')).toBe('plain failure');
+    expect(manager.resolveRuntimeError('')).toBe('actionsUnavailable');
+  });
+
+  test('normalizes inbox state, prunes orphan actions and formats every age band', () => {
+    manager.renderNotifications = jest.fn();
+    manager.updateInboxControls = jest.fn();
+    manager.expandedNotificationId = 'orphan';
+    manager.issueActionStates.set('orphan', {});
+    manager.issueActionStates.set('kept', {});
+    manager.notifications = [
+      manager.normalizeNotification({ id: 'kept', read: false, bundleCount: 0 }),
+      manager.normalizeNotification({ id: 'read', read: true, bundleCount: 3, updatedOn: '2026-07-17T00:00:00Z' })
+    ];
+
+    manager.setInboxView('invalid');
+    expect(manager.activeInboxView).toBe('unread');
+    manager.setInboxView('all');
+    expect(manager.activeInboxView).toBe('all');
+    manager.pruneIssueActionState();
+    expect(manager.issueActionStates.has('orphan')).toBe(false);
+    expect(manager.expandedNotificationId).toBeUndefined();
+
+    expect(manager.notificationMatchesInboxView(manager.notifications[0])).toBe(true);
+    manager.activeInboxView = 'read';
+    expect(manager.notificationMatchesInboxView(manager.notifications[1])).toBe(true);
+    manager.activeInboxView = 'unread';
+    expect(manager.notificationMatchesInboxView(manager.notifications[1])).toBe(false);
+
+    expect(manager.formatDate(new Date())).toBe('justNow');
+    expect(manager.formatDate(new Date(Date.now() - 5 * 60 * 1000))).toBe('minutesAgo');
+    expect(manager.formatDate(new Date(Date.now() - 2 * 60 * 60 * 1000))).toBe('hoursAgo');
+    expect(manager.formatDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))).toBe('daysAgo');
+    expect(manager.escapeHtml(null)).toBe('');
+    expect(manager.sanitizeAttribute(0)).toBe('');
+    expect(manager.sanitizeUrl(null)).toBe('#');
+  });
+
+  test('covers bulk read, refresh and history success and failure outcomes', async () => {
+    manager.renderNotifications = jest.fn();
+    manager.applySyncResult = jest.fn();
+    manager.announceActionFailure = jest.fn();
+    manager.notifications = [{ id: 'one', read: false }];
+    manager.issueActionStates.set('one', {});
+    manager.expandedNotificationId = 'one';
+
+    manager.sendRuntimeMessage = jest.fn()
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: false })
+      .mockRejectedValueOnce(new Error('read failed'));
+    await manager.markAllAsRead();
+    expect(manager.notifications[0].read).toBe(true);
+    await manager.markAllAsRead();
+    await manager.markAllAsRead();
+    expect(manager.announceActionFailure).toHaveBeenCalledTimes(2);
+
+    manager.sendRuntimeMessage = jest.fn()
+      .mockResolvedValueOnce({ status: 'success' })
+      .mockResolvedValueOnce({
+        status: 'success',
+        notifications: [{ id: 'two', bundleCount: 1 }]
+      })
+      .mockRejectedValueOnce(new Error('refresh failed'));
+    await manager.refreshNotifications();
+    await manager.refreshNotifications();
+    await manager.refreshNotifications();
+    expect(elements.refreshBtn.disabled).toBe(false);
+    expect(elements.refreshBtn.classList.remove).toHaveBeenCalledWith('syncing');
+
+    global.confirm.mockReturnValueOnce(false);
+    await manager.clearNotificationHistory();
+
+    global.confirm.mockReturnValue(true);
+    manager.sendRuntimeMessage = jest.fn()
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: false })
+      .mockRejectedValueOnce(new Error('clear failed'));
+    await manager.clearNotificationHistory();
+    await manager.clearNotificationHistory();
+    await manager.clearNotificationHistory();
+    expect(global.alert).toHaveBeenCalledTimes(2);
+  });
+
+  test('renders updated, watched, expanded, read and unread notification variants', () => {
+    const makeClone = () => {
+      const parts = {
+        '.notification-content': createMockElement(),
+        '.notification-title': createMockElement(),
+        '.notification-meta': createMockElement(),
+        '.change-summary': createMockElement(),
+        '.notification-actions': createMockElement(),
+        '.advanced-actions-panel': createMockElement()
+      };
+      return createMockElement({
+        querySelector: jest.fn(selector => parts[selector]),
+        parts
+      });
+    };
+    const clones = [];
+    manager._notificationTemplate = {
+      cloneNode: jest.fn(() => {
+        const clone = makeClone();
+        clones.push(clone);
+        return clone;
+      })
+    };
+    manager.renderChangeSummary = jest.fn();
+    manager.renderAdvancedActionsPanel = jest.fn();
+    manager.openNotification = jest.fn();
+    manager.expandedNotificationId = 'updated';
+
+    const updatedElement = manager.createNotificationElement({
+      id: 'updated',
+      title: 'Updated issue',
+      read: false,
+      isUpdated: true,
+      sourceType: 'assigned',
+      project: 'Project',
+      status: 'Open',
+      assigneeName: 'Mew',
+      updatedOn: new Date()
+    });
+    expect(updatedElement.classList.add).toHaveBeenCalledWith('expanded');
+    expect(manager.renderAdvancedActionsPanel).toHaveBeenCalled();
+
+    const keyHandler = clones[0].parts['.notification-content'].addEventListener.mock.calls[0][1];
+    const enterEvent = { key: 'Enter', preventDefault: jest.fn() };
+    keyHandler(enterEvent);
+    keyHandler({ key: 'Escape', preventDefault: jest.fn() });
+    expect(enterEvent.preventDefault).toHaveBeenCalled();
+    expect(manager.openNotification).toHaveBeenCalled();
+
+    manager.expandedNotificationId = undefined;
+    const watchedElement = manager.createNotificationElement({
+      id: 'watched',
+      title: '',
+      read: true,
+      isUpdated: false,
+      sourceType: 'watched',
+      updatedOn: new Date()
+    });
+    expect(watchedElement.className).toContain('read');
+    expect(manager.renderAdvancedActionsPanel).toHaveBeenCalledTimes(1);
+  });
+
+  test('renders both empty and populated inbox states and coalesces rendering', () => {
+    global.document.querySelectorAll = jest.fn(() => []);
+    elements.emptyText = createMockElement();
+    manager.notifications = [];
+    manager.renderNotifications();
+    expect(elements.emptyState.style.display).toBe('block');
+
+    manager.notifications = [{ id: 'one', read: false, updatedOn: new Date() }];
+    manager.renderAllNotifications = jest.fn();
+    manager.renderNotifications();
+    expect(elements.notificationsList.style.display).toBe('block');
+    expect(elements.markAllReadBtn.style.display).toBe('flex');
+
+    manager.notifications = [{ id: 'two', read: true, updatedOn: new Date() }];
+    manager.activeInboxView = 'all';
+    manager.renderNotifications();
+    expect(elements.markAllReadBtn.style.display).toBe('none');
+
+    manager.renderNotifications = jest.fn();
+    manager.throttledRender();
+    manager.throttledRender();
+    jest.advanceTimersByTime(16);
+    expect(manager.renderNotifications).toHaveBeenCalledTimes(1);
   });
 });
