@@ -91,6 +91,34 @@
     "message": "About",
     "description": "About tab"
   },
+  "privacyNoticeTitle": {
+    "message": "Privacy notice",
+    "description": "Privacy disclosure heading in Options"
+  },
+  "privacyNoticeSummary": {
+    "message": "Your API key stays in local extension storage. Issue data is exchanged directly with your configured Redmine server and is not collected or shared by the extension developer.",
+    "description": "Concise privacy disclosure in Options"
+  },
+  "privacyPolicyLink": {
+    "message": "Read the privacy policy",
+    "description": "Link to the public privacy policy"
+  },
+  "privacyNoticeAcknowledgedLabel": {
+    "message": "I have read and acknowledge privacy notice version 1.",
+    "description": "Privacy acknowledgement checkbox label"
+  },
+  "privacyConsentRequired": {
+    "message": "Acknowledge the current privacy notice before testing or saving Redmine settings.",
+    "description": "Privacy acknowledgement validation message"
+  },
+  "privacyConsentSaveError": {
+    "message": "The privacy acknowledgement could not be saved. Please try again.",
+    "description": "Privacy acknowledgement storage error"
+  },
+  "privacyTitle": {
+    "message": "Privacy:",
+    "description": "Privacy heading in About"
+  },
   "redmineUrl": {
     "message": "Redmine URL:",
     "description": "Redmine URL field label"
@@ -736,5 +764,17 @@
   "actionFailedRetry": { "message": "The action failed. Please retry." },
   "openIssue": { "message": "Open issue" },
   "soundPlatformLimitation": { "message": "Notification sound depends on browser and operating-system settings" },
+  "diagnosticsTitle": { "message": "Safe diagnostics" },
+  "diagnosticsDescription": { "message": "Detailed diagnostics are off by default. When enabled, up to 100 sanitized events are kept only on this device for seven days. You can clear or disable them at any time, and nothing is uploaded automatically. Exported health snapshots exclude credentials, server identity, issue content, and raw errors." },
+  "diagnosticsEnabledLabel": { "message": "Enable local detailed diagnostics" },
+  "exportDiagnostics": { "message": "Export diagnostics" },
+  "clearDiagnostics": { "message": "Clear diagnostics" },
+  "diagnosticsEnabledSuccess": { "message": "Detailed diagnostics enabled." },
+  "diagnosticsDisabledSuccess": { "message": "Detailed diagnostics disabled and retained events deleted." },
+  "diagnosticsUpdateError": { "message": "Could not update the diagnostics setting." },
+  "diagnosticsClearedSuccess": { "message": "Retained diagnostic events cleared." },
+  "diagnosticsClearError": { "message": "Could not clear diagnostic events." },
+  "diagnosticsExportSuccess": { "message": "Diagnostic snapshot exported. Review the JSON before sharing it." },
+  "diagnosticsExportError": { "message": "The diagnostic snapshot was rejected or could not be exported." },
   "syncStatusLastSuccess": { "message": "Last successful sync: $1" }
 }

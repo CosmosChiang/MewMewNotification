@@ -1,8 +1,6 @@
 ## Purpose
 Ensure Redmine credentials remain in local-only extension storage and are never exposed through synchronized storage, logs, or user-visible diagnostics.
-
 ## Requirements
-
 ### Requirement: API key storage is local-only
 The extension MUST store the Redmine API key in local extension storage and
 MUST NOT persist it in synchronized storage.
@@ -47,3 +45,10 @@ The list of read notification IDs stored in `chrome.storage.sync` SHALL NOT exce
 #### Scenario: Read list grows to the limit
 - **WHEN** the number of stored read notification IDs reaches 1000 and a new one is added
 - **THEN** the oldest ID is discarded and the new ID is appended before writing
+
+### Requirement: Public listing describes credential storage accurately
+Chrome Web Store copy and screenshots MUST state that the Redmine API key is stored only in local extension storage and is not synchronized across devices.
+
+#### Scenario: Credential storage copy is validated
+- **WHEN** localized listing metadata is prepared for publication
+- **THEN** every locale describes local-only credential storage and contains no claim that the API key is stored in synchronized storage

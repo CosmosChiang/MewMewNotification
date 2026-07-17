@@ -7,6 +7,8 @@
 
 MewMewNotification is a simple, multi-language Chrome extension that instantly notifies you of Redmine issue updates, with flexible notification management and project filtering features.
 
+Review the [MewMewNotification Privacy Policy](https://github.com/CosmosChiang/MewMewNotification/blob/main/PRIVACY.md) for details about API keys, Redmine issue data, local storage, retention, and deletion.
+
 ## Screenshots
 
 Below are screenshots of the main MewMewNotification interfaces:
@@ -93,9 +95,9 @@ Below are screenshots of the main MewMewNotification interfaces:
 - `npm run test:local`: run the faster local test flow
 - `npm run test:ci`: run the CI-aligned test suite
 - `npm run test:coverage`: regenerate the coverage report
-- `npm run audit:high`: fail on high / critical dependency vulnerabilities
+- `npm run audit:moderate`: fail on moderate / high / critical dependency vulnerabilities
 - GitHub Actions runs multi-version Node.js tests, validation, and extension packaging for pushes to `main` and PRs targeting `main`
-- GitHub Actions runs `npm run audit:high` in the Node.js `20.x` job to block high-severity dependency issues
+- GitHub Actions runs `npm run audit:moderate` in the Node.js `22.x` and `24.x` jobs to block moderate-or-higher dependency issues
 - Pushing a `v*` tag creates a GitHub Release with the packaged ZIP attached
 - See the [CI/CD Testing Guide](docs/CI_TESTING_GUIDE.md) for the full workflow details
 
@@ -105,6 +107,16 @@ Below are screenshots of the main MewMewNotification interfaces:
 2. Commit your changes (please include explanations and test cases if possible).
 3. Submit a Pull Request describing your changes.
 4. Maintainers will review and merge your contribution.
+
+## Permissions
+
+- `storage`: stores preferences; API keys remain in local extension storage
+- `notifications`: displays desktop notifications
+- `alarms`: schedules notification synchronization at the configured interval
+- `background`: runs the Manifest V3 service worker
+- `optional_host_permissions`: requests access only to the configured Redmine origin
+
+Opening a Redmine issue in a new tab does not require `activeTab`, and the extension does not inspect or modify the active page.
 
 ## FAQ
 

@@ -1,8 +1,12 @@
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
-const { createInstrumenter } = require('istanbul-lib-instrument');
 const { ConfigManager } = require('./shared/config-manager.js');
+const { SafeLogger } = require('./shared/safe-logger.js');
+const { RedmineAPI } = require('./background/redmine-api.js');
+const { NotificationService } = require('./background/notification-service.js');
+const { RuntimeRouter } = require('./background/runtime-router.js');
+const {
+  createPeriodicAlarmEnsurer,
+  registerRuntimeListeners
+} = require('./background/runtime-bootstrap.js');
 
 function createChromeMock() {
   return {
@@ -89,50 +93,76 @@ function createChromeMock() {
 
 function loadBackgroundModule(chromeMock) {
   global.chrome = chromeMock;
-
-  const filePath = path.join(__dirname, '..', 'background.js');
-  const source = createInstrumenter({ compact: false }).instrumentSync(fs.readFileSync(filePath, 'utf8'), filePath);
-  const sandbox = {
-    module: { exports: {} },
-    exports: {},
-    require,
-    console,
-    URL,
-    URLSearchParams,
-    Date,
-    Promise,
-    Map,
-    Set,
-    performance: { now: () => 0 },
-    setTimeout,
-    clearTimeout,
-    AbortController,
-    fetch: global.fetch && global.fetch._isMockFunction
-      ? global.fetch
-      : jest.fn().mockResolvedValue({
-      json: () => Promise.resolve({
-        extName: { message: 'MewMewNotification' },
-        hostPermissionRequired: {
-          message: 'Grant host access for the configured Redmine server before syncing'
-        }
-      })
-    }),
-    importScripts: jest.fn(),
-    chrome: chromeMock,
-    ConfigManager,
-    globalThis: {
-      ConfigManager
-    },
-    __coverage__: global.__coverage__ = global.__coverage__ || {}
+  const HOST_PERMISSION_RECOVERY_NOTIFICATION_ID = 'host-permission-recovery';
+  const ALARM_NAME = 'redmine-notification-check';
+  const RETRY_ALARM_NAME = 'redmine-notification-retry';
+  const RETRY_METADATA_KEY = 'notificationRetryV1';
+  const logger = new SafeLogger({
+    consoleAdapter: {
+      warn: jest.fn(),
+      error: jest.fn()
+    }
+  });
+  const i18n = {
+    loadLanguage: jest.fn().mockResolvedValue({}),
+    getCurrentLanguage: jest.fn(() => 'en'),
+    translate: jest.fn(key => key)
   };
+  class NotificationManager extends NotificationService {
+    constructor(dependencies = {}) {
+      super({
+        chrome: chromeMock,
+        logger,
+        i18n,
+        profileState: null,
+        RedmineAPIClass: RedmineAPI,
+        ConfigManagerClass: ConfigManager,
+        ...dependencies
+      });
+    }
+  }
+  const notificationManager = new NotificationManager();
+  const ensurePeriodicAlarm = createPeriodicAlarmEnsurer({
+    chrome: chromeMock,
+    notificationService: notificationManager,
+    alarmName: ALARM_NAME
+  });
+  const runtimeRouter = new RuntimeRouter({
+    notificationService: notificationManager,
+    RedmineAPIClass: RedmineAPI,
+    chrome: chromeMock,
+    alarmName: ALARM_NAME,
+    logger,
+    apiDependencies: {
+      fetch: global.fetch,
+      AbortController,
+      setTimeout,
+      clearTimeout,
+      ConfigManagerClass: ConfigManager,
+      logger
+    }
+  });
+  registerRuntimeListeners({
+    chrome: chromeMock,
+    notificationService: notificationManager,
+    router: runtimeRouter,
+    ensurePeriodicAlarm,
+    alarmName: ALARM_NAME,
+    retryAlarmName: RETRY_ALARM_NAME,
+    hostPermissionRecoveryNotificationId: HOST_PERMISSION_RECOVERY_NOTIFICATION_ID,
+    logger
+  });
 
-  vm.runInNewContext(
-    `${source}\nmodule.exports = { NotificationManager, RedmineAPI, HOST_PERMISSION_RECOVERY_NOTIFICATION_ID, ensurePeriodicAlarm, notificationManager, ALARM_NAME, RETRY_ALARM_NAME, RETRY_METADATA_KEY };`,
-    sandbox,
-    { filename: filePath }
-  );
-
-  return sandbox.module.exports;
+  return {
+    NotificationManager,
+    RedmineAPI,
+    HOST_PERMISSION_RECOVERY_NOTIFICATION_ID,
+    ensurePeriodicAlarm,
+    notificationManager,
+    ALARM_NAME,
+    RETRY_ALARM_NAME,
+    RETRY_METADATA_KEY
+  };
 }
 
 function createNotificationCheckLocalGet({
@@ -1100,7 +1130,7 @@ describe('NotificationManager host permission recovery', () => {
     expect(keepsChannelOpen).toBe(true);
     expect(sendResponse).toHaveBeenCalledWith({
       success: false,
-      error: 'storage unavailable'
+      error: 'runtimeActionFailed'
     });
   });
 });
@@ -1453,7 +1483,6 @@ describe('desktop notification actions', () => {
       callback();
       chromeMock.runtime.lastError = undefined;
     });
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const { NotificationManager } = loadBackgroundModule(chromeMock);
     const manager = new NotificationManager();
     const state = configureDesktopManager(manager);
@@ -1472,10 +1501,6 @@ describe('desktop notification actions', () => {
       expect.stringMatching(mappingType === 'single' ? /^issue:/ : /^batch:/),
       expect.any(Object),
       expect.any(Function)
-    );
-    expect(consoleSpy).toHaveBeenCalledWith(
-      'Failed to create notification:',
-      expect.objectContaining({ message: 'platform rejected notification' })
     );
   });
 });

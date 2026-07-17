@@ -36,7 +36,7 @@ jobs:
       - run: npm run locale:check
       - run: npm run workflow:check
       - run: npm run test:ci -- --detectOpenHandles --silent
-      - run: npm run audit:high
+      - run: npm run audit:moderate
       - run: npm run openspec:check
       - name: Upload coverage
         if: matrix.node-version == '24.x' && env.CODECOV_TOKEN != ''

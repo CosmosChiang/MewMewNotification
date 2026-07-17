@@ -17,9 +17,14 @@ const I18nManager = require('./i18n.js');
 
 describe('I18nManager', () => {
   let i18nManager;
+  let logger;
 
   beforeEach(() => {
-    i18nManager = new I18nManager();
+    logger = {
+      warn: jest.fn(),
+      error: jest.fn()
+    };
+    i18nManager = new I18nManager({ logger });
     jest.clearAllMocks();
     
     // Reset manager state
@@ -31,6 +36,27 @@ describe('I18nManager', () => {
     test('should initialize with default values', () => {
       expect(i18nManager.currentLanguage).toBe('en');
       expect(i18nManager.translations).toEqual({});
+    });
+
+    test('uses every safe default dependency without leaking failures', async () => {
+      const manager = new I18nManager();
+      global.fetch.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          appName: { message: 'MewMew Notification' }
+        })
+      });
+
+      await expect(manager.loadLanguage('en')).resolves.toEqual({
+        appName: { message: 'MewMew Notification' }
+      });
+      expect(global.fetch).toHaveBeenCalledWith('_locales/en/messages.json');
+
+      manager.translations = {};
+      expect(manager.translate('missing')).toBe('missing');
+
+      manager.fetch = undefined;
+      await expect(manager.loadLanguage('en')).resolves.toEqual({});
     });
   });
 
@@ -91,17 +117,15 @@ describe('I18nManager', () => {
           json: () => Promise.resolve(englishTranslations)
         });
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
       const result = await i18nManager.loadLanguage();
 
       expect(global.fetch).toHaveBeenCalledWith('_locales/fr/messages.json');
       expect(global.fetch).toHaveBeenCalledWith('_locales/en/messages.json');
       expect(i18nManager.currentLanguage).toBe('en');
       expect(result).toEqual(englishTranslations);
-      expect(consoleSpy).toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
+      expect(logger.error).toHaveBeenCalledWith('i18n_locale_load_failed', expect.objectContaining({
+        language: 'fr'
+      }));
     });
 
     test('should handle complete failure gracefully', async () => {
@@ -111,29 +135,23 @@ describe('I18nManager', () => {
         status: 404
       });
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
       const result = await i18nManager.loadLanguage();
 
       expect(i18nManager.translations).toEqual({});
       expect(result).toEqual({});
-      expect(consoleSpy).toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
+      expect(logger.error).toHaveBeenCalledTimes(2);
     });
 
     test('should handle network errors', async () => {
       chrome.storage.sync.get.mockResolvedValue({ language: 'ja' });
       global.fetch.mockRejectedValue(new Error('Network error'));
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
       const result = await i18nManager.loadLanguage();
 
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to load language:', expect.any(Error));
+      expect(logger.error).toHaveBeenCalledWith('i18n_locale_load_failed', expect.objectContaining({
+        errorCode: 'localeLoadFailed'
+      }));
       expect(result).toEqual({});
-
-      consoleSpy.mockRestore();
     });
 
     test('should handle JSON parsing errors', async () => {
@@ -143,14 +161,66 @@ describe('I18nManager', () => {
         json: () => Promise.reject(new Error('Invalid JSON'))
       });
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
       const result = await i18nManager.loadLanguage();
 
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalled();
       expect(result).toEqual({});
+    });
 
-      consoleSpy.mockRestore();
+    test('falls back when storage fails and updates an injected document root', async () => {
+      const documentRoot = {};
+      const manager = new I18nManager({
+        storage: {
+          get: jest.fn().mockRejectedValue(new Error('storage unavailable'))
+        },
+        fetch: jest.fn().mockResolvedValue({
+          ok: true,
+          json: jest.fn().mockResolvedValue({
+            appName: { message: 'MewMew Notification' }
+          })
+        }),
+        documentRoot,
+        logger
+      });
+
+      await expect(manager.loadLanguage()).resolves.toEqual({
+        appName: { message: 'MewMew Notification' }
+      });
+      expect(documentRoot.lang).toBe('en');
+      expect(logger.warn).toHaveBeenCalledWith('i18n_storage_read_failed', {
+        errorCode: 'storageReadFailed'
+      });
+    });
+
+    test('returns deterministic English state when no fetch dependency exists', async () => {
+      const documentRoot = {};
+      const manager = new I18nManager({
+        storage: { get: jest.fn().mockResolvedValue({ language: 'ja' }) },
+        fetch: null,
+        documentRoot,
+        logger
+      });
+      manager.fetch = undefined;
+
+      await expect(manager.loadLanguage()).resolves.toEqual({});
+      expect(manager.getCurrentLanguage()).toBe('en');
+      expect(documentRoot.lang).toBe('en');
+      expect(logger.error).toHaveBeenCalledTimes(2);
+    });
+
+    test('accepts null storage results and responses with no explicit ok flag', async () => {
+      const manager = new I18nManager({
+        storage: { get: jest.fn().mockResolvedValue(null) },
+        fetch: jest.fn().mockResolvedValue({
+          json: jest.fn().mockResolvedValue({ title: { message: 'Title' } })
+        }),
+        logger
+      });
+
+      await expect(manager.loadLanguage()).resolves.toEqual({
+        title: { message: 'Title' }
+      });
+      expect(manager.getCurrentLanguage()).toBe('en');
     });
   });
 
@@ -170,14 +240,12 @@ describe('I18nManager', () => {
     });
 
     test('should return key for missing translation', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-
       const result = i18nManager.translate('nonexistent');
       
       expect(result).toBe('nonexistent');
-      expect(consoleSpy).toHaveBeenCalledWith('Translation missing for key: nonexistent');
-
-      consoleSpy.mockRestore();
+      expect(logger.warn).toHaveBeenCalledWith('i18n_translation_missing', {
+        errorCode: 'translationMissing'
+      });
     });
 
     test('should handle single substitution', () => {

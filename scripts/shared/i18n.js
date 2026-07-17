@@ -1,73 +1,108 @@
-// Shared internationalization utility
-class I18nManager {
-  constructor() {
-    this.currentLanguage = 'en';
-    this.translations = {};
-  }
+(function initializeI18nManager(root, factory) {
+  const I18nManager = factory();
 
-  async loadLanguage(languageOverride) {
-    try {
-      if (languageOverride) {
-        this.currentLanguage = languageOverride;
-      } else {
-        const result = await chrome.storage.sync.get(['language']);
-        const languageSettings = globalThis.ConfigManager?.normalizeStorageResult
-          ? globalThis.ConfigManager.normalizeStorageResult(result)
-          : (result && typeof result === 'object' ? result : {});
-        this.currentLanguage = languageSettings.language || 'en';
-      }
-      
-      // Load translations
-      const response = await fetch(`_locales/${this.currentLanguage}/messages.json`);
-      if (!response.ok) {
-        throw new Error(`Failed to load language file: ${response.status}`);
-      }
-      
-      this.translations = await response.json();
-      return this.translations;
-    } catch (error) {
-      console.error('Failed to load language:', error);
-      
-      // Fallback to English if loading fails
-      if (this.currentLanguage !== 'en') {
-        return this.loadLanguage('en');
-      }
-      
-      // If even English fails, return empty object
+  /* istanbul ignore else -- browser export is verified by packaged Chromium smoke */
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = I18nManager;
+  } else {
+    root.I18nManager = I18nManager;
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : this, function createI18nManager() {
+  class I18nManager {
+    constructor({
+      storage,
+      fetch: fetchImplementation,
+      localeUrlResolver = language => `_locales/${language}/messages.json`,
+      documentRoot,
+      logger
+    } = {}) {
+      this.storage = storage || globalThis.chrome?.storage?.sync;
+      this.fetch = fetchImplementation || globalThis.fetch;
+      this.localeUrlResolver = localeUrlResolver;
+      this.documentRoot = documentRoot;
+      this.logger = logger || {
+        warn: () => {},
+        error: () => {}
+      };
+      this.currentLanguage = 'en';
       this.translations = {};
+    }
+
+    async loadLanguage(languageOverride) {
+      let selectedLanguage = languageOverride;
+
+      if (!selectedLanguage) {
+        try {
+          const result = await this.storage?.get?.(['language']);
+          const normalized = result && typeof result === 'object' ? result : {};
+          selectedLanguage = normalized.language || 'en';
+        } catch {
+          selectedLanguage = 'en';
+          this.logger.warn('i18n_storage_read_failed', { errorCode: 'storageReadFailed' });
+        }
+      }
+
+      return this.loadWithEnglishFallback(selectedLanguage || 'en');
+    }
+
+    async loadWithEnglishFallback(language) {
+      const candidates = language === 'en' ? ['en'] : [language, 'en'];
+
+      for (const candidate of candidates) {
+        try {
+          if (typeof this.fetch !== 'function') {
+            throw new Error('localeFetchUnavailable');
+          }
+          const response = await this.fetch(this.localeUrlResolver(candidate));
+          if (response?.ok === false) {
+            throw new Error('localeFetchFailed');
+          }
+          this.translations = await response.json();
+          this.currentLanguage = candidate;
+          if (this.documentRoot) {
+            this.documentRoot.lang = candidate.replace('_', '-');
+          }
+          return this.translations;
+        } catch {
+          this.logger.error('i18n_locale_load_failed', {
+            errorCode: 'localeLoadFailed',
+            language: candidate
+          });
+        }
+      }
+
+      this.currentLanguage = 'en';
+      this.translations = {};
+      if (this.documentRoot) {
+        this.documentRoot.lang = 'en';
+      }
+      return this.translations;
+    }
+
+    translate(key, substitutions = []) {
+      const translation = this.translations[key];
+      if (!translation) {
+        this.logger.warn('i18n_translation_missing', {
+          errorCode: 'translationMissing'
+        });
+        return key;
+      }
+
+      let message = translation.message;
+      substitutions.forEach((substitution, index) => {
+        message = message.replace(`$${index + 1}`, substitution);
+      });
+      return message;
+    }
+
+    getCurrentLanguage() {
+      return this.currentLanguage;
+    }
+
+    getTranslations() {
       return this.translations;
     }
   }
 
-  translate(key, substitutions = []) {
-    const translation = this.translations[key];
-    if (!translation) {
-      console.warn(`Translation missing for key: ${key}`);
-      return key;
-    }
-    
-    let message = translation.message;
-    if (substitutions && substitutions.length > 0) {
-      substitutions.forEach((sub, index) => {
-        message = message.replace(`$${index + 1}`, sub);
-      });
-    }
-    
-    return message;
-  }
-
-  getCurrentLanguage() {
-    return this.currentLanguage;
-  }
-
-  getTranslations() {
-    return this.translations;
-  }
-}
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = I18nManager;
-} else {
-  window.I18nManager = I18nManager;
-}
+  return I18nManager;
+});

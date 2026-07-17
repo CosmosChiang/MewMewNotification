@@ -171,6 +171,34 @@
     "message": "關於",
     "description": "About tab"
   },
+  "privacyNoticeTitle": {
+    "message": "隱私權聲明",
+    "description": "Privacy disclosure heading in Options"
+  },
+  "privacyNoticeSummary": {
+    "message": "API 金鑰只會保存在本機擴充功能儲存空間。議題資料僅與您設定的 Redmine 伺服器直接交換，擴充功能開發者不會收集或分享這些資料。",
+    "description": "Concise privacy disclosure in Options"
+  },
+  "privacyPolicyLink": {
+    "message": "閱讀隱私權政策",
+    "description": "Link to the public privacy policy"
+  },
+  "privacyNoticeAcknowledgedLabel": {
+    "message": "我已閱讀並確認第 1 版隱私權聲明。",
+    "description": "Privacy acknowledgement checkbox label"
+  },
+  "privacyConsentRequired": {
+    "message": "測試連線或儲存 Redmine 設定前，請先確認目前的隱私權聲明。",
+    "description": "Privacy acknowledgement validation message"
+  },
+  "privacyConsentSaveError": {
+    "message": "無法儲存隱私權確認紀錄，請再試一次。",
+    "description": "Privacy acknowledgement storage error"
+  },
+  "privacyTitle": {
+    "message": "隱私權：",
+    "description": "Privacy heading in About"
+  },
   "redmineUrl": {
     "message": "Redmine 網址：",
     "description": "Redmine URL field label"
@@ -727,5 +755,17 @@
   "connectionRetrying": { "message": "連線失敗，正在重試" },
   "rateLimitWarning": { "message": "請求過於頻繁，稍後將重試" },
   "syncStatusLastSuccess": { "message": "上次成功同步：$1" },
+  "diagnosticsTitle": { "message": "安全診斷" },
+  "diagnosticsDescription": { "message": "詳細診斷預設為關閉。啟用後，最多 100 筆已淨化事件只會在此裝置保留七天；你可隨時清除或停用，且不會自動上傳。匯出的健康快照不含憑證、伺服器身分、議題內容或原始錯誤。" },
+  "diagnosticsEnabledLabel": { "message": "啟用本機詳細診斷" },
+  "exportDiagnostics": { "message": "匯出診斷" },
+  "clearDiagnostics": { "message": "清除診斷" },
+  "diagnosticsEnabledSuccess": { "message": "已啟用詳細診斷。" },
+  "diagnosticsDisabledSuccess": { "message": "已停用詳細診斷並刪除保留事件。" },
+  "diagnosticsUpdateError": { "message": "無法更新診斷設定。" },
+  "diagnosticsClearedSuccess": { "message": "已清除保留的診斷事件。" },
+  "diagnosticsClearError": { "message": "無法清除診斷事件。" },
+  "diagnosticsExportSuccess": { "message": "已匯出診斷快照，分享前請先檢查 JSON。" },
+  "diagnosticsExportError": { "message": "診斷快照遭拒或無法匯出。" },
   "by": { "message": "由" }
 }
