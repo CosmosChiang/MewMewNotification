@@ -9,6 +9,24 @@ const outputArg = process.argv.find(arg => arg.startsWith('--output='));
 const output = path.resolve(root, outputArg ? outputArg.slice(9) : 'dist/mewmew-notification-extension.zip');
 const validateOnly = process.argv.includes('--validate-only');
 const normalized = value => value.split(path.sep).join('/');
+const expectedRequiredPermissions = ['alarms', 'background', 'notifications', 'storage'];
+const expectedOptionalHostPermissions = ['http://*/*', 'http://[::1]/*', 'https://*/*'];
+
+function validateManifestPermissions() {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+  const actual = [...(manifest.permissions || [])].sort();
+  const unexpected = actual.filter(permission => !expectedRequiredPermissions.includes(permission));
+  const missing = expectedRequiredPermissions.filter(permission => !actual.includes(permission));
+  if (unexpected.length || missing.length) {
+    throw new Error(`Manifest required permissions mismatch. Unexpected=${unexpected.join(',')} Missing=${missing.join(',')}`);
+  }
+  const actualOptionalHosts = [...(manifest.optional_host_permissions || [])].sort();
+  const unexpectedHosts = actualOptionalHosts.filter(permission => !expectedOptionalHostPermissions.includes(permission));
+  const missingHosts = expectedOptionalHostPermissions.filter(permission => !actualOptionalHosts.includes(permission));
+  if (unexpectedHosts.length || missingHosts.length) {
+    throw new Error(`Manifest optional host permissions mismatch. Unexpected=${unexpectedHosts.join(',')} Missing=${missingHosts.join(',')}`);
+  }
+}
 
 function walk(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -35,6 +53,8 @@ function validateEntries(entries) {
   const forbidden = actual.filter(entry => /(^|\/)(node_modules|docs|tests?|\.git|\.github|openspec|test-info\.txt)(\/|$)/i.test(entry));
   if (forbidden.length) throw new Error(`Forbidden package entries: ${forbidden.join(',')}`);
 }
+
+validateManifestPermissions();
 
 if (!validateOnly) {
   fs.mkdirSync(path.dirname(output), { recursive: true });

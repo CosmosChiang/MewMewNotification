@@ -171,6 +171,34 @@
     "message": "について",
     "description": "About tab"
   },
+  "privacyNoticeTitle": {
+    "message": "プライバシーに関する通知",
+    "description": "Privacy disclosure heading in Options"
+  },
+  "privacyNoticeSummary": {
+    "message": "API キーはローカルの拡張機能ストレージにのみ保存されます。課題データは設定した Redmine サーバーと直接送受信され、拡張機能の開発者が収集または共有することはありません。",
+    "description": "Concise privacy disclosure in Options"
+  },
+  "privacyPolicyLink": {
+    "message": "プライバシーポリシーを読む",
+    "description": "Link to the public privacy policy"
+  },
+  "privacyNoticeAcknowledgedLabel": {
+    "message": "プライバシー通知バージョン 1 を読み、確認しました。",
+    "description": "Privacy acknowledgement checkbox label"
+  },
+  "privacyConsentRequired": {
+    "message": "Redmine の接続テストまたは設定保存の前に、現在のプライバシー通知を確認してください。",
+    "description": "Privacy acknowledgement validation message"
+  },
+  "privacyConsentSaveError": {
+    "message": "プライバシー確認を保存できませんでした。もう一度お試しください。",
+    "description": "Privacy acknowledgement storage error"
+  },
+  "privacyTitle": {
+    "message": "プライバシー：",
+    "description": "Privacy heading in About"
+  },
   "redmineUrl": {
     "message": "Redmine URL：",
     "description": "Redmine URL field label"
@@ -727,5 +755,17 @@
   "connectionRetrying": { "message": "接続に失敗したため再試行しています" },
   "rateLimitWarning": { "message": "要求が多すぎるため後で再試行します" },
   "syncStatusLastSuccess": { "message": "前回の同期成功：$1" },
+  "diagnosticsTitle": { "message": "安全な診断" },
+  "diagnosticsDescription": { "message": "詳細診断は既定で無効です。有効にすると、サニタイズ済みイベントを最大 100 件、この端末だけに 7 日間保持します。いつでも消去または無効化でき、自動送信は行いません。エクスポートする状態スナップショットには認証情報、サーバー識別情報、チケット内容、生のエラーを含めません。" },
+  "diagnosticsEnabledLabel": { "message": "ローカル詳細診断を有効にする" },
+  "exportDiagnostics": { "message": "診断をエクスポート" },
+  "clearDiagnostics": { "message": "診断を消去" },
+  "diagnosticsEnabledSuccess": { "message": "詳細診断を有効にしました。" },
+  "diagnosticsDisabledSuccess": { "message": "詳細診断を無効にし、保持イベントを削除しました。" },
+  "diagnosticsUpdateError": { "message": "診断設定を更新できませんでした。" },
+  "diagnosticsClearedSuccess": { "message": "保持していた診断イベントを消去しました。" },
+  "diagnosticsClearError": { "message": "診断イベントを消去できませんでした。" },
+  "diagnosticsExportSuccess": { "message": "診断スナップショットをエクスポートしました。共有前に JSON を確認してください。" },
+  "diagnosticsExportError": { "message": "診断スナップショットが拒否されたか、エクスポートできませんでした。" },
   "by": { "message": "作成者" }
 }

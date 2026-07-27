@@ -23,7 +23,7 @@ if (workflow.permissions?.contents !== 'read') fail('Top-level permissions must 
 if (workflow.jobs.release.permissions?.contents !== 'write') fail('Release contents: write must be job-scoped');
 const requiredCommands = [
   'npm run lint', 'npm run locale:check', 'npm run test:ci', 'npm run test:integration',
-  'npm run test:smoke', 'npm run audit:high', 'npm run openspec:check',
+  'npm run test:smoke', 'npm run audit:moderate', 'npm run openspec:check',
   'npm run package:validate', 'npm run version:check'
 ];
 for (const command of requiredCommands) if (!content.includes(command)) fail(`Missing CI gate: ${command}`);

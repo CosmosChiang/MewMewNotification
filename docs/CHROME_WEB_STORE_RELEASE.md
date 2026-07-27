@@ -23,7 +23,8 @@ Review `docs/webstore-listing.md` and all five PNG files for each locale under `
 - [ ] Promotional images are uploaded once as shared locale-neutral artwork; they contain no locale-specific copy.
 - [ ] English, Traditional Chinese, Simplified Chinese, and Japanese listings are all reviewed in the Dashboard preview.
 - [ ] Privacy disclosure remains consistent with runtime behavior: no collection or sale of user data; API keys remain only in local extension storage and do not synchronize across devices.
-- [ ] Permission justification covers storage, notifications, alarms, active tab, background service worker, and optional per-Redmine-origin host access.
+- [ ] Public [privacy policy version 1](https://github.com/CosmosChiang/MewMewNotification/blob/main/PRIVACY.md) is linked in both READMEs and Options, and the Developer Dashboard uses the same URL.
+- [ ] Permission justification covers storage, notifications, alarms, background service worker, and optional per-Redmine-origin host access; `activeTab` remains absent.
 - [ ] Listing copy does not claim universal desktop notification buttons. Open issue and Mark read buttons are platform-dependent.
 - [ ] Mark read is understood as changing retained extension notification state only; it does not mutate the Redmine issue.
 - [ ] Batch notifications and unsupported button environments retain the Popup inbox fallback.
@@ -39,7 +40,7 @@ npm run webstore:check
 npm run package:validate
 npm run lint
 npm test -- --detectOpenHandles --silent
-openspec validate "refresh-chrome-web-store-listing" --type change --strict
+openspec validate --all --strict
 ```
 
 Chrome Web Store submission and review remain manual external steps.

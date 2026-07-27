@@ -30,6 +30,22 @@
           <input type="password" id="apiKey" placeholder="Your Redmine API key">
           <small id="apiKeyHelp">You can find your API key in your Redmine account settings</small>
         </div>
+        <section class="privacy-notice" id="privacyNotice" aria-labelledby="privacyNoticeTitle">
+          <h3 id="privacyNoticeTitle">Privacy notice</h3>
+          <p id="privacyNoticeSummary">Your API key stays in local extension storage. Issue data is exchanged directly with your configured Redmine server and is not collected or shared by the extension developer.</p>
+          <p>
+            <a
+              id="privacyPolicyLink"
+              href="https://github.com/CosmosChiang/MewMewNotification/blob/main/PRIVACY.md"
+              target="_blank"
+              rel="noopener noreferrer"
+            >Read the privacy policy</a>
+          </p>
+          <label class="checkbox-label">
+            <input type="checkbox" id="privacyNoticeAcknowledged">
+            <span id="privacyNoticeAcknowledgedLabel">I have read and acknowledge privacy notice version 1.</span>
+          </label>
+        </section>
         <button id="testConnectionBtn" class="test-btn">Test Connection</button>
         <div id="connectionStatus" class="status-message"></div>
         <div class="section-footer">
@@ -236,6 +252,28 @@
           
           <h4 id="supportTitle">Support:</h4>
           <p id="supportText">If you encounter any issues or have suggestions, please contact support.</p>
+          <h4 id="privacyTitle">Privacy:</h4>
+          <p>
+            <a
+              id="aboutPrivacyPolicyLink"
+              href="https://github.com/CosmosChiang/MewMewNotification/blob/main/PRIVACY.md"
+              target="_blank"
+              rel="noopener noreferrer"
+            >Read the privacy policy</a>
+          </p>
+          <section class="diagnostics-section" aria-labelledby="diagnosticsTitle">
+            <h4 id="diagnosticsTitle">Safe diagnostics</h4>
+            <p id="diagnosticsDescription">Detailed diagnostics are off by default. When enabled, up to 100 sanitized events are kept locally for seven days and are never uploaded automatically.</p>
+            <label class="checkbox-label" for="diagnosticsEnabled">
+              <input type="checkbox" id="diagnosticsEnabled">
+              <span id="diagnosticsEnabledLabel">Enable local detailed diagnostics</span>
+            </label>
+            <div class="diagnostics-actions">
+              <button type="button" id="exportDiagnosticsBtn">Export diagnostics</button>
+              <button type="button" id="clearDiagnosticsBtn">Clear diagnostics</button>
+            </div>
+            <div id="diagnosticsStatus" class="status-message" role="status" aria-live="polite"></div>
+          </section>
         </div>
       </div>
     </div>
@@ -247,8 +285,12 @@
     <div id="saveStatus" class="status-message"></div>
   </div>
   
+  <script src="scripts/shared/safe-logger.js"></script>
   <script src="scripts/shared/i18n.js"></script>
   <script src="scripts/shared/config-manager.js"></script>
+  <script src="scripts/shared/privacy-consent.js"></script>
+  <script src="scripts/shared/diagnostic-event-store.js"></script>
+  <script src="scripts/background/diagnostic-snapshot.js"></script>
   <script src="scripts/options.js"></script>
 </body>
 </html>

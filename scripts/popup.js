@@ -1,5 +1,20 @@
 class PopupManager {
   constructor() {
+    const SafeLoggerClass = globalThis.SafeLogger;
+    this.logger = SafeLoggerClass ? new SafeLoggerClass() : {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {}
+    };
+    const I18nManagerClass = globalThis.I18nManager;
+    this.i18n = I18nManagerClass ? new I18nManagerClass({
+      storage: globalThis.chrome?.storage?.sync,
+      fetch: globalThis.fetch,
+      localeUrlResolver: language => `_locales/${language}/messages.json`,
+      documentRoot: globalThis.document?.documentElement,
+      logger: this.logger
+    }) : null;
     this.currentLanguage = 'en';
     this.translations = {};
     this.notifications = [];
@@ -22,50 +37,20 @@ class PopupManager {
   }
 
   async loadLanguage(languageOverride) {
-    try {
-      if (languageOverride) {
-        this.currentLanguage = languageOverride;
-      } else {
-        const result = await chrome.storage.sync.get(['language']);
-        const configManagerClass = globalThis.ConfigManager;
-        const languageSettings = configManagerClass?.normalizeStorageResult
-          ? configManagerClass.normalizeStorageResult(result)
-          : (result && typeof result === 'object' ? result : {});
-        this.currentLanguage = languageSettings.language || 'en';
-      }
-      
-      const response = await fetch(`_locales/${this.currentLanguage}/messages.json`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      this.translations = await response.json();
-      document.documentElement.lang = this.currentLanguage.replace('_', '-');
-      
-      this.updateUI();
-      return this.translations;
-    } catch (error) {
-      console.error('Failed to load language:', error);
-      if (this.currentLanguage !== 'en') {
-        return this.loadLanguage('en');
-      }
+    if (!this.i18n) {
       this.translations = {};
       this.updateUI();
       return this.translations;
     }
+
+    this.translations = await this.i18n.loadLanguage(languageOverride);
+    this.currentLanguage = this.i18n.getCurrentLanguage();
+    this.updateUI();
+    return this.translations;
   }
 
   translate(key, substitutions = []) {
-    const translation = this.translations[key];
-    if (!translation) return key;
-    
-    let message = translation.message;
-    if (substitutions.length > 0) {
-      substitutions.forEach((sub, index) => {
-        message = message.replace(`$${index + 1}`, sub);
-      });
-    }
-    
-    return message;
+    return this.i18n ? this.i18n.translate(key, substitutions) : key;
   }
 
   updateUI() {
@@ -377,8 +362,8 @@ class PopupManager {
         this.throttledRender();
       }
       this.applySyncResult(response);
-    } catch (error) {
-      console.error('Failed to load notifications:', error);
+    } catch (_error) {
+      this.logger.error('popup_notifications_load_failed', { errorCode: 'notificationsLoadFailed' });
       this.setHealthStatus('syncStatusStale', { assertive: true });
     }
   }
@@ -788,7 +773,7 @@ class PopupManager {
       state.context = response.context;
       this.syncIssueActionSelections(state);
     } catch (error) {
-      console.error('Failed to load issue action context:', error);
+      this.logger.error('popup_issue_context_load_failed', { errorCode: 'issueContextLoadFailed' });
       state.error = this.resolveRuntimeError(error);
     } finally {
       state.isLoading = false;
@@ -1150,7 +1135,7 @@ class PopupManager {
 
       state.success = this.translate(successMessageKey);
     } catch (error) {
-      console.error('Issue action failed:', error);
+      this.logger.error('popup_issue_action_failed', { errorCode: 'issueActionFailed' });
       state.error = this.resolveRuntimeError(error);
     } finally {
       state.isSubmitting = false;
@@ -1246,7 +1231,7 @@ class PopupManager {
         return url;
       }
     } catch (_error) {
-      console.warn('Invalid URL provided:', url);
+      this.logger.warn('popup_invalid_url', { errorCode: 'invalidUrl' });
     }
     return '#';
   }
@@ -1254,15 +1239,15 @@ class PopupManager {
   async openNotification(notification) {
     const safeUrl = this.sanitizeUrl(notification.url);
     if (safeUrl === '#') {
-      console.error('Invalid or unsafe URL detected:', notification.url);
+      this.logger.error('popup_unsafe_url_blocked', { errorCode: 'unsafeUrl' });
       return;
     }
     
     try {
       await chrome.tabs.create({ url: safeUrl });
       window.close();
-    } catch (error) {
-      console.error('Failed to open notification URL:', error);
+    } catch (_error) {
+      this.logger.error('popup_open_url_failed', { errorCode: 'openUrlFailed' });
       this.announceActionFailure();
     }
   }
@@ -1287,8 +1272,8 @@ class PopupManager {
       } else {
         this.announceActionFailure();
       }
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+    } catch (_error) {
+      this.logger.error('popup_mark_read_failed', { errorCode: 'markReadFailed' });
       this.announceActionFailure();
     }
   }
@@ -1308,8 +1293,8 @@ class PopupManager {
       } else {
         this.announceActionFailure();
       }
-    } catch (error) {
-      console.error('Failed to mark all notifications as read:', error);
+    } catch (_error) {
+      this.logger.error('popup_mark_all_read_failed', { errorCode: 'markAllReadFailed' });
       this.announceActionFailure();
     }
   }
@@ -1332,8 +1317,8 @@ class PopupManager {
         this.renderNotifications();
       }
       this.applySyncResult(response);
-    } catch (error) {
-      console.error('Failed to refresh notifications:', error);
+    } catch (_error) {
+      this.logger.error('popup_refresh_failed', { errorCode: 'refreshFailed' });
       this.setHealthStatus('syncStatusStale', { assertive: true });
     } finally {
       refreshBtn.disabled = false;
@@ -1358,8 +1343,8 @@ class PopupManager {
       } else {
         alert(this.translate('clearHistoryError'));
       }
-    } catch (error) {
-      console.error('Failed to clear notification history:', error);
+    } catch (_error) {
+      this.logger.error('popup_clear_history_failed', { errorCode: 'clearHistoryFailed' });
       alert(this.translate('clearHistoryError'));
     }
   }

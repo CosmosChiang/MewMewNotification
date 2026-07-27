@@ -1,28 +1,17 @@
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
 const http = require('node:http');
-const { ConfigManager } = require('./shared/config-manager.js');
+const { RedmineAPI } = require('./background/redmine-api.js');
 
 function loadRedmineApi(baseFetch) {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8');
-  const noopEvent = { addListener: jest.fn() };
-  const chrome = {
-    storage: { sync: { get: async () => ({}), set: async () => {}, remove: async () => {} }, local: { get: async () => ({}), set: async () => {}, remove: async () => {} }, onChanged: noopEvent },
-    permissions: { contains: async () => true },
-    action: { setBadgeText() {}, setBadgeBackgroundColor() {}, setTitle() {}, openPopup() {} },
-    notifications: { create() {}, clear(_id, callback) { callback?.(true); }, getAll() {}, onClicked: noopEvent, onButtonClicked: noopEvent, onClosed: noopEvent },
-    alarms: { create() {}, clear(_name, callback) { callback?.(true); }, get(_name, callback) { callback?.(undefined); }, onAlarm: noopEvent },
-    runtime: { onInstalled: noopEvent, onStartup: noopEvent, onMessage: noopEvent, openOptionsPage() {} },
-    tabs: { create: async () => {} }
+  return class TestRedmineAPI extends RedmineAPI {
+    constructor(baseUrl, apiKey) {
+      super(baseUrl, apiKey, {
+        fetch: baseFetch,
+        AbortController,
+        setTimeout,
+        clearTimeout
+      });
+    }
   };
-  const sandbox = {
-    module: { exports: {} }, exports: {}, console, URL, URLSearchParams, Date, Promise, Map, Set,
-    performance, setTimeout, clearTimeout, AbortController, fetch: baseFetch, chrome,
-    importScripts: jest.fn(), ConfigManager, globalThis: { __MEW_TEST_VM__: true, ConfigManager }
-  };
-  vm.runInNewContext(`${source}\nmodule.exports = { RedmineAPI };`, sandbox);
-  return sandbox.module.exports.RedmineAPI;
 }
 
 describe('fake Redmine HTTP integration', () => {

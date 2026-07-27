@@ -7,15 +7,14 @@
   "engines": {
     "node": ">=22 <25"
   },
-  "dependencies": {},
   "devDependencies": {
     "@fission-ai/openspec": "^1.6.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "eslint": "^10.0.3",
     "globals": "^17.7.0",
     "istanbul-lib-instrument": "^6.0.3",
     "jest": "^30.4.2",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^5.2.1",
     "playwright": "^1.61.1"
   },
   "scripts": {
@@ -32,7 +31,7 @@
     "webstore:check": "node tools/validate-webstore-assets.js --media",
     "workflow:check": "node validate-workflow.js",
     "openspec:check": "node tools/validate-openspec.js",
-    "audit:high": "npm audit --audit-level=high",
+    "audit:moderate": "npm audit --audit-level=moderate",
     "package": "node tools/package-extension.js",
     "package:validate": "node tools/package-extension.js --validate-only",
     "version:check": "node tools/validate-version.js",
