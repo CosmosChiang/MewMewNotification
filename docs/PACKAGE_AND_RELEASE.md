@@ -15,7 +15,7 @@ npm run test:smoke
 The ZIP and checksum are written to `dist/mewmew-notification-extension.zip` and `.sha256`. Verify a prospective tag with:
 
 ```powershell
-$env:RELEASE_TAG = 'v1.5.0'
+$env:RELEASE_TAG = 'v1.5.1'
 npm run version:check
 ```
 

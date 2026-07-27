@@ -1,6 +1,6 @@
 {
   "name": "mewmewnotification",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "Redmine notification Chrome extension",
   "main": "background.js",
@@ -10,13 +10,16 @@
   "dependencies": {},
   "devDependencies": {
     "@fission-ai/openspec": "^1.6.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "eslint": "^10.0.3",
     "globals": "^17.7.0",
     "istanbul-lib-instrument": "^6.0.3",
     "jest": "^30.4.2",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^5.2.2",
     "playwright": "^1.61.1"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.8"
   },
   "scripts": {
     "lint": "eslint .",
