@@ -16,7 +16,7 @@
     "istanbul-lib-instrument": "^6.0.3",
     "jest": "^30.4.2",
     "js-yaml": "^5.2.2",
-    "playwright": "^1.61.1"
+    "playwright": "^1.62.0"
   },
   "overrides": {
     "brace-expansion": "5.0.8"
