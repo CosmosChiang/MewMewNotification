@@ -4,6 +4,9 @@ const vm = require('node:vm');
 const http = require('node:http');
 const { ConfigManager } = require('./shared/config-manager.js');
 
+const REDMINE_UPDATED_ON_FILTER_PATTERN =
+  /^>=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|\d{2}:?\d{2})$/;
+
 function loadRedmineApi(baseFetch) {
   const source = fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8');
   const noopEvent = { addListener: jest.fn() };
@@ -42,6 +45,12 @@ describe('fake Redmine HTTP integration', () => {
         response.end(JSON.stringify({ user: { id: 7, login: 'tester' } })); return;
       }
       if (url.pathname === '/issues.json') {
+        const updatedOnFilter = url.searchParams.get('updated_on');
+        if (updatedOnFilter && !REDMINE_UPDATED_ON_FILTER_PATTERN.test(updatedOnFilter)) {
+          response.writeHead(422);
+          response.end(JSON.stringify({ errors: ['更新日期 是無效的'] }));
+          return;
+        }
         const offset = Number(url.searchParams.get('offset'));
         const all = Array.from({ length: 25 }, (_, index) => ({ id: index + 1, updated_on: `2026-07-11T00:${String(index).padStart(2, '0')}:00.000Z` }));
         response.end(JSON.stringify({ issues: all.slice(offset, offset + 10), total_count: 25, offset, limit: 10 })); return;
@@ -67,6 +76,8 @@ describe('fake Redmine HTTP integration', () => {
     expect(requests.filter(item => item.url.startsWith('/issues.json'))).toHaveLength(3);
     expect(requests[1].url).toContain('status_id=*');
     expect(requests[1].url).toContain('updated_on=%3E%3D');
+    expect(new URL(requests[1].url, baseUrl).searchParams.get('updated_on'))
+      .toBe('>=2026-07-11T00:08:00Z');
   });
 
   test('sends validated mutation payload and handles 204 response', async () => {

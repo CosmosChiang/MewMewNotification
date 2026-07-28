@@ -480,7 +480,12 @@ class RedmineAPI {
         const params = new URLSearchParams({ status_id: '*', sort: 'updated_on:asc,id:asc', limit: String(API_PAGE_SIZE), offset: String(offset) });
         if (source.assigned_to_id) params.set('assigned_to_id', String(source.assigned_to_id));
         if (source.watcher_id) params.set('watcher_id', String(source.watcher_id));
-        if (cursor) params.set('updated_on', `>=${new Date(new Date(cursor).getTime() - CURSOR_OVERLAP_MS).toISOString()}`);
+        if (cursor) {
+          const overlapStart = new Date(new Date(cursor).getTime() - CURSOR_OVERLAP_MS);
+          // Redmine query filters reject fractional seconds even when issue timestamps include them.
+          const redmineTimestamp = overlapStart.toISOString().replace(/\.\d{3}Z$/, 'Z');
+          params.set('updated_on', `>=${redmineTimestamp}`);
+        }
         const response = await this.request(`/issues.json?${params.toString()}`);
         const page = Array.isArray(response.issues) ? response.issues : [];
         totalCount = Number.isFinite(response.total_count) ? response.total_count : offset + page.length;

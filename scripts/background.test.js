@@ -1227,6 +1227,8 @@ describe('lossless notification synchronization', () => {
     ]));
     expect(endpoints[0]).toContain('status_id=*');
     expect(endpoints[0]).toContain('updated_on=%3E%3D');
+    expect(new URL(`https://redmine.example.com${endpoints[0]}`).searchParams.get('updated_on'))
+      .toBe('>=2026-07-11T00:08:00Z');
   });
 
   test('deduplicates equal timestamp events across assigned and watched pages', async () => {
