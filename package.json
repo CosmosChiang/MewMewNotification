@@ -12,7 +12,7 @@
     "@fission-ai/openspec": "^1.6.0",
     "adm-zip": "^0.6.0",
     "eslint": "^10.8.0",
-    "globals": "^17.7.0",
+    "globals": "^17.9.0",
     "istanbul-lib-instrument": "^6.0.3",
     "jest": "^30.4.2",
     "js-yaml": "^5.2.2",
